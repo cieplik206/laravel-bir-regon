@@ -1,0 +1,51 @@
+{
+    "name": "cieplik206/laravel-bir-regon",
+    "description": "Laravel client for the Polish GUS BIR/REGON API",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.3",
+        "gusapi/gusapi": "^6.3",
+        "illuminate/contracts": "^13.0",
+        "illuminate/support": "^13.0",
+        "spatie/laravel-data": "^4.14"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.0",
+        "orchestra/testbench": "^11.0",
+        "pestphp/pest": "^4.0",
+        "pestphp/pest-plugin-laravel": "^4.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "cieplik206\\BirRegon\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "cieplik206\\BirRegon\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "cieplik206\\BirRegon\\BirRegonServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "test:sandbox": "pest --configuration phpunit.sandbox.xml.dist --group=sandbox",
+        "analyse": "phpstan analyse",
+        "format": "pint"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        },
+        "sort-packages": true
+    }
+}
