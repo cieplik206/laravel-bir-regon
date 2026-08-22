@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate Composer metadata
+        run: composer validate --strict --no-check-publish
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Check code style
+        run: vendor/bin/pint --test
+
+      - name: Run static analysis
+        run: vendor/bin/phpstan analyse --no-progress
+
+      - name: Audit dependencies
+        run: composer audit
+
+  tests:
+    name: Tests (PHP ${{ matrix.php }}, ${{ matrix.dependencies }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: '8.3'
+            dependencies: lowest
+            composer-options: --prefer-lowest --prefer-stable
+          - php: '8.3'
+            dependencies: highest
+            composer-options: ''
+          - php: '8.4'
+            dependencies: highest
+            composer-options: ''
+          - php: '8.5'
+            dependencies: highest
+            composer-options: ''
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Install ${{ matrix.dependencies }} dependencies
+        run: composer update ${{ matrix.composer-options }} --prefer-dist --no-interaction --no-progress
+
+      - name: Run tests
+        run: composer test
+
+  passed:
+    name: CI Passed
+    if: always()
+    needs:
+      - quality
+      - tests
+    runs-on: ubuntu-slim
+    timeout-minutes: 2
+
+    steps:
+      - name: Verify all CI jobs passed
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          TESTS_RESULT: ${{ needs.tests.result }}
+        run: |
+          test "$QUALITY_RESULT" = success
+          test "$TESTS_RESULT" = success
