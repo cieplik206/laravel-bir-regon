@@ -6,7 +6,10 @@ use cieplik206\BirRegon\BirClient;
 use cieplik206\BirRegon\Enums\BulkReportType;
 use cieplik206\BirRegon\Enums\ReportType;
 use cieplik206\BirRegon\Exceptions\BirException;
+use cieplik206\BirRegon\Exceptions\BirNotFoundException;
 use cieplik206\BirRegon\Tests\Support\StubGusApiFactory;
+use GusApi\Exception\InvalidServerResponseException;
+use GusApi\Exception\NotFoundException;
 use GusApi\GusApi;
 use GusApi\SearchReport;
 use GusApi\Type\Response\SearchResponseCompanyData;
@@ -133,6 +136,27 @@ it('does not retry or renew an active session after an ordinary API failure', fu
         ]);
 });
 
+it('checks the remote session once after a not-found response that may indicate expiry', function (): void {
+    $api = new ExpiringSessionGusApi([makeSessionRecoverySearchReport()]);
+    $client = new BirClient(new StubGusApiFactory($api), 'api-key');
+    $api->failNextSearchWith(new NotFoundException('No data found'));
+
+    expect(fn () => $client->searchByNip('1111111111'))
+        ->toThrow(BirNotFoundException::class)
+        ->and($api->loginCalls)->toBe(1)
+        ->and($api->sessionStatusCalls)->toBe(1);
+});
+
+it('does not query the remote session status after local batch validation fails', function (): void {
+    $api = new ExpiringSessionGusApi([makeSessionRecoverySearchReport()]);
+    $client = new BirClient(new StubGusApiFactory($api), 'api-key');
+
+    expect(fn () => $client->searchByNips(array_fill(0, 21, '1111111111')))
+        ->toThrow(BirException::class, 'GUS API error: Too many identifiers. Maximum allowed is 20.')
+        ->and($api->loginCalls)->toBe(1)
+        ->and($api->sessionStatusCalls)->toBe(0);
+});
+
 class ExpiringSessionGusApi extends GusApi
 {
     public int $bulkReportCalls = 0;
@@ -142,6 +166,8 @@ class ExpiringSessionGusApi extends GusApi
     public int $fullReportCalls = 0;
 
     public int $loginCalls = 0;
+
+    public int $sessionStatusCalls = 0;
 
     /** @var list<string> */
     public array $searchedNips = [];
@@ -177,6 +203,8 @@ class ExpiringSessionGusApi extends GusApi
 
     public function isLogged(): bool
     {
+        $this->sessionStatusCalls++;
+
         return $this->sessionActive;
     }
 
@@ -208,7 +236,7 @@ class ExpiringSessionGusApi extends GusApi
         $this->dataStatusCalls++;
 
         if (! $this->sessionActive) {
-            throw new RuntimeException('GUS session expired.');
+            throw new InvalidServerResponseException('Invalid empty data status response.');
         }
 
         return $this->dataStatus;

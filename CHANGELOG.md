@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-08-23
+
+### Fixed
+
+- Avoid unnecessary session-status requests after locally rejected invalid arguments
+
 ## [1.0.1] - 2026-08-23
 
 ### Fixed
@@ -28,6 +34,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Isolated tests and opt-in live GUS sandbox tests
 - A discoverable Laravel Boost skill for AI-assisted integrations
 
-[Unreleased]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/cieplik206/laravel-bir-regon/releases/tag/v1.0.0

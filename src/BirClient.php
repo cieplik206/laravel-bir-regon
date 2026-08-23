@@ -16,6 +16,7 @@ use cieplik206\BirRegon\Exceptions\BirAuthenticationException;
 use cieplik206\BirRegon\Exceptions\BirException;
 use cieplik206\BirRegon\Exceptions\BirNotFoundException;
 use DateTimeImmutable;
+use GusApi\Exception\InvalidServerResponseException;
 use GusApi\Exception\InvalidUserKeyException;
 use GusApi\Exception\NotFoundException;
 use GusApi\GusApi;
@@ -287,6 +288,12 @@ class BirClient implements BirClientInterface
                 return $result;
             }
         } catch (InvalidUserKeyException|BirException $exception) {
+            throw $exception;
+        } catch (InvalidServerResponseException $exception) {
+            if (! $this->sessionHasExpired($api)) {
+                throw $exception;
+            }
+        } catch (\InvalidArgumentException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
             if (! $this->sessionHasExpired($api)) {

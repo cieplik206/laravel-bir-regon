@@ -62,6 +62,13 @@ try {
 The original exception is retained as `getPrevious()` when an error is wrapped
 by the package.
 
+## Expired sessions
+
+Long-lived workers do not need to renew GUS sessions manually. When a request
+indicates that the authenticated session has expired, the client logs in again
+and retries the operation once. If the retry also fails, the resulting
+exception is returned normally and should be handled by the application.
+
 ## Diagnostics after a failed search
 
 The GUS session may expose a more specific message after a failed request:
