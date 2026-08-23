@@ -177,8 +177,10 @@ try {
 }
 ```
 
-Both specialized exceptions extend `BirException`. Wrapped upstream errors
-remain available through `getPrevious()`.
+Both specialized exceptions extend `BirException`. The package redacts the
+active API key and session ID from translated errors. `getPrevious()` exposes a
+safe `BirException` surrogate with the sanitized message and original error
+code, never the raw GUS or transport exception.
 
 ## Testing
 

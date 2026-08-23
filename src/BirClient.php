@@ -234,11 +234,11 @@ class BirClient implements BirClientInterface
         } catch (InvalidUserKeyException $exception) {
             $this->loggedIn = false;
 
-            throw new BirAuthenticationException('Invalid API key', 0, $exception);
+            throw $this->safeAuthenticationException($exception);
         } catch (BirException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
-            throw new BirException('GUS API error: '.$exception->getMessage(), 0, $exception);
+            throw $this->safeBirException('GUS API error', $exception);
         }
     }
 
@@ -334,11 +334,11 @@ class BirClient implements BirClientInterface
         } catch (InvalidUserKeyException $exception) {
             $this->loggedIn = false;
 
-            throw new BirAuthenticationException('Invalid API key', 0, $exception);
+            throw $this->safeAuthenticationException($exception);
         } catch (BirException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
-            throw new BirException('GUS API error: '.$exception->getMessage(), 0, $exception);
+            throw $this->safeBirException('GUS API error', $exception);
         }
     }
 
@@ -358,7 +358,7 @@ class BirClient implements BirClientInterface
         try {
             $this->api = $this->gusApiFactory->make($this->apiKey, $this->environment);
         } catch (Throwable $exception) {
-            throw new BirException('Failed to connect to GUS API: '.$exception->getMessage(), 0, $exception);
+            throw $this->safeBirException('Failed to connect to GUS API', $exception);
         }
 
         return $this->api;
@@ -390,11 +390,64 @@ class BirClient implements BirClientInterface
             $api->login();
             $this->loggedIn = true;
         } catch (InvalidUserKeyException $exception) {
-            throw new BirAuthenticationException('Invalid API key', 0, $exception);
+            throw $this->safeAuthenticationException($exception);
         } catch (BirException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
-            throw new BirException('Failed to connect to GUS API: '.$exception->getMessage(), 0, $exception);
+            throw $this->safeBirException('Failed to connect to GUS API', $exception);
         }
+    }
+
+    private function safeBirException(string $context, Throwable $exception): BirException
+    {
+        $message = $exception->getMessage();
+
+        foreach ($this->sensitiveValues() as $sensitiveValue) {
+            $message = str_replace($sensitiveValue, '[REDACTED]', $message);
+        }
+
+        return new BirException(
+            $context.($message === '' ? '.' : ': '.$message),
+            0,
+            $this->safePreviousException($exception, $message),
+        );
+    }
+
+    private function safeAuthenticationException(
+        InvalidUserKeyException $exception,
+    ): BirAuthenticationException {
+        return new BirAuthenticationException(
+            'Invalid API key',
+            0,
+            $this->safePreviousException($exception, 'Invalid API key'),
+        );
+    }
+
+    private function safePreviousException(Throwable $exception, string $message): BirException
+    {
+        return new BirException(
+            $message === '' ? 'Upstream GUS API error.' : $message,
+            $exception->getCode(),
+        );
+    }
+
+    /** @return list<string> */
+    private function sensitiveValues(): array
+    {
+        $values = $this->apiKey === '' ? [] : [$this->apiKey];
+
+        if ($this->api !== null) {
+            try {
+                $sessionId = $this->api->getSessionId();
+
+                if ($sessionId !== '') {
+                    $values[] = $sessionId;
+                }
+            } catch (Throwable) {
+                // The session ID is unavailable before a successful login.
+            }
+        }
+
+        return array_values(array_unique($values));
     }
 }

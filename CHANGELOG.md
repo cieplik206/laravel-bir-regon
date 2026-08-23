@@ -7,6 +7,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- Redact BIR API keys and session IDs from translated GUS exceptions while
+  preserving diagnostic context through a credential-free surrogate cause
+
 ## [1.1.0] - 2026-08-23
 
 ### Added
