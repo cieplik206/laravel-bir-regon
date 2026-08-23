@@ -2,14 +2,16 @@
 
 # Extending the package
 
-Laravel BIR REGON registers its client, factory, and fluent service as
-singletons in Laravel's service container. Applications may replace the public
-contracts without changing the facade or application-level API.
+Laravel BIR REGON separates its fluent API, GUS protocol gateway, and SOAP
+transport behind public contracts. The default bindings are scoped, so a
+session may be reused within one Laravel request or worker scope without
+becoming global state in a long-running process.
 
 ## Replacing the client
 
-Create a class that implements `BirClientInterface`, then replace the binding
-in the consuming application's service provider:
+Replace `BirClientInterface` when an application needs to change the complete
+package-level behavior, including searches, reports, service information,
+diagnostics, and logout:
 
 ```php
 <?php
@@ -24,7 +26,7 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->singleton(
+        $this->app->scoped(
             BirClientInterface::class,
             CustomBirClient::class,
         );
@@ -32,47 +34,189 @@ class AppServiceProvider extends ServiceProvider
 }
 ```
 
-The replacement must implement searches, reports, service information, and
-diagnostics declared by the contract. `BirClientInterface` is the production
-client binding; sandbox construction remains isolated by the package service
-provider.
-
 Register the replacement before `BirRegonService` or the `BirRegon` facade is
-first resolved.
+first resolved in the current scope.
 
-## Replacing the GUS API factory
+The singular-identifier client methods are list-valued despite their names:
+`searchByNip()`, `searchByRegon()`, and `searchByKrs()` each return a
+`list<CompanyData>`, because one identifier may represent several GUS silos.
+Batch search methods use the same list contract. The plural full-report methods
+`getFullReportsByNip()`, `getFullReportsByKrs()`, and `getFullReports()` return a
+`list<FullCompanyReportData>`. The corresponding singular full-report methods
+must throw `BirAmbiguousResultException` rather than silently choosing one of
+several distinct compatible report REGON values.
 
-When only construction of the underlying `GusApi` client needs customization,
-replace `GusApiFactoryInterface` and keep the package's `BirClient`:
+## Replacing the GUS gateway
+
+Implement `BirGatewayInterface` to keep the package's `BirClient`, fluent
+builders, validation, and public data objects while replacing access to the GUS
+operations:
 
 ```php
-use App\Bir\CustomGusApiFactory;
-use cieplik206\BirRegon\GusApiFactoryInterface;
+use App\Bir\CustomBirGateway;
+use cieplik206\BirRegon\Contracts\BirGatewayInterface;
 
-$this->app->singleton(
-    GusApiFactoryInterface::class,
-    CustomGusApiFactory::class,
+$this->app->scoped(
+    BirGatewayInterface::class,
+    CustomBirGateway::class,
 );
 ```
 
-This extension point is suitable for a controlled test double or custom
-construction logic and is used by both the production and sandbox clients.
-SOAP transport, authentication, and response mapping otherwise remain
-encapsulated by the package.
+The gateway contract works with package protocol values rather than vendor
+objects:
+
+- `search(SearchCriteria $criteria)` returns a list of `SearchResult` objects;
+- `fullReport(string $regon, ReportType $reportType)` returns decoded report
+  rows as a `list<array<string, string>>`, including an empty or multi-row
+  list;
+- `bulkReport(DateTimeImmutable $date, BulkReportType $reportType)` returns a
+  list of REGON strings;
+- `getValue(GetValueParameter $parameter)` returns the requested scalar value;
+- `diagnostics()` returns a `DiagnosticsSnapshot` containing the message code,
+  message, and session status;
+- `logout()` ends the current session and returns the remote boolean result.
+
+All three diagnostic values in `DiagnosticsSnapshot` must belong to one
+captured session SID. If a custom gateway renews an expired session while
+collecting diagnostics, it must repeat the complete snapshot instead of mixing
+values from the previous and renewed sessions. `BirClient` validates and maps
+this protocol snapshot to the public `DiagnosticsData` object.
+
+This is the preferred boundary for deterministic integration fakes and for a
+custom non-SOAP backend that can provide equivalent GUS BIR semantics.
+
+Replacing the gateway bypasses the native transport graph, including its local
+request limiter. A gateway that still calls GUS must provide equivalent quota
+coordination; a deterministic fake that never performs network I/O does not
+need it.
+
+`SearchResult` uses `EntityType`, `Silo`, and nullable `NipStatus` enums for
+closed protocol vocabularies. A custom gateway must construct those enums and
+must not pass arbitrary response strings through as public types. Applications
+that need stricter input policy may call `PolishIdentifierChecksum` before the
+fluent API, or use the optional checksum argument on the NIP and REGON
+`SearchCriteria` factories when constructing protocol criteria directly.
+Format-only validation remains the default because that is the GUS request
+contract.
+
+## Replacing only the SOAP transport
+
+Implement `BirSoapTransportInterface` when requests need a different HTTP or
+SOAP execution layer but the native authentication, session recovery, report
+decoding, and exception translation should remain in place:
+
+```php
+use App\Bir\CustomBirSoapTransport;
+use cieplik206\BirRegon\Contracts\BirSoapTransportInterface;
+
+$this->app->scoped(
+    BirSoapTransportInterface::class,
+    CustomBirSoapTransport::class,
+);
+```
+
+The transport receives a `BirOperation` and its typed package parameters and
+must return a `TransportResponse`. It is also responsible for applying the
+current session set through `useSession()`. Implementations must not expose the
+API key, session identifier, request XML, or raw response content in exception
+messages, stack traces, debug output, or serialized state.
+
+The native implementation reserves the operation's limiter cost after local
+request construction and immediately before every HTTP exchange. Replacing
+`BirSoapTransportInterface` bypasses that implementation, so the custom
+transport must coordinate the GUS quota itself. It should propagate
+`BirRateLimitException` without converting it to a generic transport failure.
+See [Request limits](rate-limits.md).
+
+A decoded transport result is private and is available only through
+`TransportResponse::result()`. Its debug representation is redacted. A
+serialized response restores only as an inert tombstone and `result()` then
+throws `LogicException`; inspecting that tombstone reports unavailable fields
+without accessing discarded state. Transport responses must not be queued or
+cached for later processing. A successful custom transport response for
+`GetValue` or logout must not set `resultWasNil`, because those result elements
+are non-nillable in the official WSDL. If a custom decoder encounters such a
+response, return
+`TransportResponse::failure(TransportFailureType::Protocol, resultWasNil: true)`
+so the gateway reports the protocol violation without attempting session
+renewal.
+
+Custom gateways must implement both `diagnostics(): DiagnosticsSnapshot` and
+`logout(): bool`. Custom clients must expose public diagnostics through
+`getDiagnostics()` and also implement `logout(): bool`. Logout implementations
+should make the no-session case idempotent and clear local session state even
+when the remote operation fails.
+
+Custom gateway and transport bindings affect the production client resolved
+from the container. `BirRegon::sandbox()` deliberately constructs an isolated
+native sandbox graph so production extensions cannot accidentally receive the
+sandbox credential or session. Replace `BirRegonService` as a whole if an
+application also needs custom sandbox behavior.
+
+When `NativeSoapTransport` is instantiated directly, omitting its request
+limiter selects `UnlimitedBirRequestLimiter`. Laravel's cache-backed default is
+added by `BirRegonServiceProvider`, not by the standalone constructor. Pass an
+explicit `BirRequestLimiterInterface` implementation when constructing a
+native transport outside Laravel.
+
+The limiter contract is deliberately small:
+`BirRequestLimiterInterface::acquire(BirOperation $operation, array $parameters = []): void`.
+It returns normally when the caller may proceed and throws
+`BirRateLimitException` otherwise. A search limiter can inspect the
+`SearchCriteria` stored in `$parameters['criteria']` to charge its
+`identifierCount()`; every other native operation costs one. The package
+service provider constructs its configured limiter directly, so replacing the
+interface in the container alone does not change the native production graph.
+Pass a limiter to `NativeSoapTransport` or replace the transport when a custom
+policy is required.
+
+A limiter that needs the native search/report recovery boundary may also
+implement `BirRateLimitScopeInterface`:
+
+```php
+interface BirRateLimitScopeInterface
+{
+    public function beginRateLimitScope(): void;
+
+    public function endRateLimitScope(): void;
+}
+```
+
+`NativeBirGateway` brackets each logical `callForRecords()` sequence with these
+methods when the transport implements the interface, and `NativeSoapTransport`
+forwards them when its limiter implements it. The protocol is an explicit,
+nest-safe begin/end pair, not a closure. A custom transport or limiter that does
+not need scoped pacing may implement only its primary interface.
+
+The built-in cache limiter supports only the exact base Laravel
+`Illuminate\Cache\Repository` with `ArrayStore`, `DatabaseStore`, `FileStore`,
+`MemcachedStore`, or `RedisStore`. It deliberately rejects tagged/decorated or
+subclassed repositories and every other store, even if it exposes locks. To use
+DynamoDB, `FailoverStore`, `MemoizedStore`, `NullStore`, or a custom backend,
+write a `BirRequestLimiterInterface` implementation with coordination semantics
+appropriate to that backend and pass it to `NativeSoapTransport`.
+
+Each native transport also owns one persistent cURL handle. `curl_reset()`
+clears callbacks, request bodies, and SID headers between calls while keeping
+that handle's connection, DNS, and TLS session caches reusable. Handles are not
+global: separate transport instances, including the production and sandbox
+graphs, never share them. A custom transport should preserve the same credential
+and environment isolation even if it uses a different connection pool.
 
 ## Facade and dependency injection
 
-Both access styles resolve `BirRegonService` from the same container:
+Both access styles resolve `BirRegonService` from the same container scope:
 
 ```php
 use cieplik206\BirRegon\BirRegonService;
 use cieplik206\BirRegon\Facades\BirRegon;
 
 $service = app(BirRegonService::class);
-$company = $service->forNip($nip)->get();
+$companies = $service->forNip($nip)->get();
 
-$sameApi = BirRegon::forNip($nip)->get();
+$sameResults = BirRegon::forNip($nip)->get();
 ```
 
 Choose dependency injection for explicit domain dependencies and the facade
-for concise Laravel integration code.
+for concise Laravel integration code. Applications upgrading a custom 1.x
+factory or client should also read [Upgrade guide for 2.0](../UPGRADE-2.0.md).

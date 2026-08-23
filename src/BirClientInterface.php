@@ -11,6 +11,7 @@ use cieplik206\BirRegon\Data\FullCompanyReportData;
 use cieplik206\BirRegon\Data\ServiceStatusData;
 use cieplik206\BirRegon\Enums\BulkReportType;
 use cieplik206\BirRegon\Enums\ReportType;
+use cieplik206\BirRegon\Exceptions\BirAmbiguousResultException;
 use cieplik206\BirRegon\Exceptions\BirAuthenticationException;
 use cieplik206\BirRegon\Exceptions\BirException;
 use cieplik206\BirRegon\Exceptions\BirNotFoundException;
@@ -19,29 +20,35 @@ use DateTimeImmutable;
 interface BirClientInterface
 {
     /**
+     * @return list<CompanyData>
+     *
      * @throws BirNotFoundException
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function searchByNip(string $nip): CompanyData;
+    public function searchByNip(string $nip): array;
 
     /**
+     * @return list<CompanyData>
+     *
      * @throws BirNotFoundException
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function searchByRegon(string $regon): CompanyData;
+    public function searchByRegon(string $regon): array;
 
     /**
+     * @return list<CompanyData>
+     *
      * @throws BirNotFoundException
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function searchByKrs(string $krs): CompanyData;
+    public function searchByKrs(string $krs): array;
 
     /**
      * @param  array<int, string>  $nips
-     * @return array<int, CompanyData>
+     * @return list<CompanyData>
      *
      * @throws BirNotFoundException
      * @throws BirAuthenticationException
@@ -51,7 +58,7 @@ interface BirClientInterface
 
     /**
      * @param  array<int, string>  $krsNumbers
-     * @return array<int, CompanyData>
+     * @return list<CompanyData>
      *
      * @throws BirNotFoundException
      * @throws BirAuthenticationException
@@ -61,7 +68,7 @@ interface BirClientInterface
 
     /**
      * @param  array<int, string>  $regons
-     * @return array<int, CompanyData>
+     * @return list<CompanyData>
      *
      * @throws BirNotFoundException
      * @throws BirAuthenticationException
@@ -71,7 +78,7 @@ interface BirClientInterface
 
     /**
      * @param  array<int, string>  $regons
-     * @return array<int, CompanyData>
+     * @return list<CompanyData>
      *
      * @throws BirNotFoundException
      * @throws BirAuthenticationException
@@ -80,6 +87,34 @@ interface BirClientInterface
     public function searchByRegons14(array $regons): array;
 
     /**
+     * @return list<FullCompanyReportData>
+     *
+     * @throws BirNotFoundException
+     * @throws BirAuthenticationException
+     * @throws BirException
+     */
+    public function getFullReportsByNip(string $nip, ReportType $reportType): array;
+
+    /**
+     * @return list<FullCompanyReportData>
+     *
+     * @throws BirNotFoundException
+     * @throws BirAuthenticationException
+     * @throws BirException
+     */
+    public function getFullReportsByKrs(string $krs, ReportType $reportType): array;
+
+    /**
+     * @return list<FullCompanyReportData>
+     *
+     * @throws BirNotFoundException
+     * @throws BirAuthenticationException
+     * @throws BirException
+     */
+    public function getFullReports(string $regon, ReportType $reportType): array;
+
+    /**
+     * @throws BirAmbiguousResultException
      * @throws BirNotFoundException
      * @throws BirAuthenticationException
      * @throws BirException
@@ -87,6 +122,7 @@ interface BirClientInterface
     public function getFullReportByNip(string $nip, ReportType $reportType): FullCompanyReportData;
 
     /**
+     * @throws BirAmbiguousResultException
      * @throws BirNotFoundException
      * @throws BirAuthenticationException
      * @throws BirException
@@ -94,6 +130,7 @@ interface BirClientInterface
     public function getFullReportByKrs(string $krs, ReportType $reportType): FullCompanyReportData;
 
     /**
+     * @throws BirAmbiguousResultException
      * @throws BirNotFoundException
      * @throws BirAuthenticationException
      * @throws BirException
@@ -120,4 +157,7 @@ interface BirClientInterface
      * @throws BirException
      */
     public function getDiagnostics(): DiagnosticsData;
+
+    /** @throws BirException */
+    public function logout(): bool;
 }

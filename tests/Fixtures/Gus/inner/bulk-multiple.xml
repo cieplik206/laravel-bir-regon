@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <dane>
+    <regon>012345678</regon>
+  </dane>
+  <dane>
+    <regon>000000001</regon>
+  </dane>
+  <dane>
+    <regon>987654321</regon>
+  </dane>
+</root>

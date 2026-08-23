@@ -1,0 +1,1775 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=yes"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <title>Plan własnej implementacji klienta GUS BIR1.2</title>
+    <script src="../../report-document.js"></script>
+    <link rel="stylesheet" href="../../report-document.css" />
+  </head>
+  <body>
+    <header id="title-block-header">
+      <h1 class="title">Plan własnej implementacji klienta GUS BIR1.2</h1>
+      <p class="implementation-status implementation-status--partial">
+        Zaimplementowano w 95%
+      </p>
+      <p class="subtitle">
+        Zastąpienie runtime dependency <code>gusapi/gusapi</code> niezależnym,
+        bezpiecznym klientem SOAP 1.2 opartym na oficjalnej dokumentacji GUS, z
+        korektą fluent API do rzeczywistej wielowierszowej odpowiedzi GUS oraz
+        własnymi, ściśle typowanymi obiektami danych pakietu Laravel BIR REGON.
+      </p>
+      <ul class="document-meta">
+        <li>Data planu: 23 sierpnia 2026</li>
+        <li>
+          Status: 36 z 38 zadań wykonanych (94,7%, zaokrąglone do 95%);
+          oczekuje na zdalne CI i wydanie
+        </li>
+        <li>Docelowe wydanie: <code>v2.0.0</code></li>
+        <li>Źródło protokołu: BIR1.2, dokumentacja v1.21</li>
+        <li>PHP: 8.4-8.5</li>
+        <li>Laravel: 13</li>
+      </ul>
+    </header>
+
+    <nav id="TOC" role="doc-toc" aria-label="Spis treści">
+      <h2>Spis treści</h2>
+      <ol>
+        <li><a href="#decyzja">Decyzja i rezultat</a></li>
+        <li><a href="#zrodla-bazowe">Oficjalne źródła GUS</a></li>
+        <li><a href="#zakres">Zakres i poza zakresem</a></li>
+        <li><a href="#reguly-gus">Reguły protokołu i usługi</a></li>
+        <li><a href="#stan-obecny">Stan obecny i sprzężenia</a></li>
+        <li><a href="#architektura">Architektura docelowa</a></li>
+        <li><a href="#protokol">Warstwa SOAP i operacje</a></li>
+        <li><a href="#raporty">Raporty BIR1.2</a></li>
+        <li><a href="#sesja-bledy">Sesja, diagnostyka i błędy</a></li>
+        <li><a href="#bezpieczenstwo">Bezpieczeństwo</a></li>
+        <li><a href="#testy">Strategia testów</a></li>
+        <li><a href="#migracja">Migracja i kompatybilność</a></li>
+        <li><a href="#etapy">Etapy i tasklista</a></li>
+        <li><a href="#kryteria">Kryteria akceptacji</a></li>
+        <li><a href="#ryzyka">Ryzyka i działania osłonowe</a></li>
+      </ol>
+    </nav>
+
+    <section id="decyzja" class="level2">
+      <h2>Decyzja i rezultat</h2>
+      <p>
+        Rekomendowany kierunek to niezależna implementacja protokołu BIR1.2 na
+        podstawie dokumentacji, WSDL, XSD i odpowiedzi sandboxa publikowanych
+        przez GUS. Kod biblioteki GusApi nie będzie kopiowany, tłumaczony ani
+        przenoszony do namespace pakietu.
+      </p>
+      <div class="business-logic-block">
+        Publiczne wyszukiwanie nie może odrzucać dodatkowych rekordów, gdy jeden
+        identyfikator występuje w kilku silosach. Wersja 2 świadomie zmienia
+        wyniki wyszukiwania na kolekcje oraz rozdziela jednoznaczne i pluralne
+        pobieranie pełnych raportów; pozostałe zmiany migracyjne opisuje
+        <code>UPGRADE-2.0.md</code>.
+      </div>
+      <div class="metric-grid" aria-label="Zakres implementacji">
+        <div class="metric"><strong>6</strong><span>operacji SOAP</span></div>
+        <div class="metric">
+          <strong>7</strong><span>kryteriów wyszukiwania</span>
+        </div>
+        <div class="metric">
+          <strong>16+1</strong><span>rodzin pełnych raportów</span>
+        </div>
+        <div class="metric">
+          <strong>6</strong><span>raportów zbiorczych</span>
+        </div>
+        <div class="metric">
+          <strong>0</strong><span>runtime zależności GusApi</span>
+        </div>
+      </div>
+      <div class="callout">
+        <p>
+          Stan na 23 sierpnia 2026: implementacja natywna, regresje,
+          dokumentacja migracji, kolekcje wielosilosowe, typowane DTO, limiter i
+          próba sandboxowa są gotowe lokalnie. Do zamknięcia planu pozostają
+          pełna macierz CI na GitHubie oraz świadome wydanie <code>v2.0.0</code>
+          po akceptacji maintenera.
+        </p>
+      </div>
+    </section>
+
+    <section id="zrodla-bazowe" class="level2">
+      <h2>Oficjalne źródła GUS</h2>
+      <p>
+        Implementacja ma wynikać z materiałów GUS, a nie z wewnętrznej
+        architektury projektu <code>johnzuk/GusApi</code>. Poniższe źródła
+        stanowią bazę normatywną planu.
+      </p>
+      <table>
+        <caption>
+          Źródła protokołu i danych
+        </caption>
+        <thead>
+          <tr>
+            <th>Źródło</th>
+            <th>Zakres wykorzystania</th>
+            <th>Stan zweryfikowany</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <a href="https://api.stat.gov.pl/Home/RegonApi"
+                >Portal API GUS - API REGON</a
+              >
+            </td>
+            <td>
+              Oficjalny punkt publikacji, środowiska, limity, kontakt i archiwum
+              dokumentacji.
+            </td>
+            <td>23 sierpnia 2026</td>
+          </tr>
+          <tr>
+            <td>
+              <a
+                href="https://api.stat.gov.pl/Content/files/regon/GUS-Regon-UslugaBIRver1.2-dokumentacjaVer1.4.zip"
+                >Archiwum dokumentacji BIR1.2</a
+              >
+            </td>
+            <td>
+              Instrukcja techniczna v1.21 z 31 grudnia 2025, przykłady, WSDL,
+              XSD, katalog błędów, słowniki PKD 2025.
+            </td>
+            <td>Pobrane i przeanalizowane</td>
+          </tr>
+          <tr>
+            <td>
+              <a
+                href="https://wyszukiwarkaregontest.stat.gov.pl/wsBIR/wsdl/UslugaBIRzewnPubl-ver11-test.wsdl"
+                >WSDL środowiska testowego</a
+              >
+            </td>
+            <td>
+              Operacje, typy wejściowe, SOAP actions, namespace i binding SOAP
+              1.2.
+            </td>
+            <td>W archiwum GUS i online</td>
+          </tr>
+          <tr>
+            <td>
+              <a
+                href="https://wyszukiwarkaregon.stat.gov.pl/wsBIR/wsdl/UslugaBIRzewnPubl-ver11-prod.wsdl"
+                >WSDL środowiska produkcyjnego</a
+              >
+            </td>
+            <td>Produkcyjny endpoint i binding.</td>
+            <td>W archiwum GUS i online</td>
+          </tr>
+          <tr>
+            <td>
+              XSD <code>BIR11_StrukturyDanych</code> i
+              <code>BIR12_StrukturyDanych</code>
+            </td>
+            <td>
+              Pola odpowiedzi, raporty PKD 2025, wariant
+              <code>BIR121JednLokalnaOsPrawnej</code> i struktury błędów.
+            </td>
+            <td>Archiwum GUS</td>
+          </tr>
+          <tr>
+            <td>
+              <a
+                href="https://bip.stat.gov.pl/dzialalnosc-statystyki-publicznej/rejestr-regon/interfejsyapi/"
+                >BIP GUS - interfejsy API REGON</a
+              >
+            </td>
+            <td>Oficjalne umocowanie i punkt odniesienia dla usługi.</td>
+            <td>23 sierpnia 2026</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="muted">
+        Nazwa WSDL nadal zawiera <code>ver11</code>. Dokumentacja GUS wskazuje,
+        że BIR1.2 zmienia przede wszystkim raporty pełne; wyszukiwanie i raporty
+        zbiorcze korzystają ze struktur BIR1.1.
+      </p>
+    </section>
+
+    <section id="zakres" class="level2">
+      <h2>Zakres i poza zakresem</h2>
+      <div class="card-grid">
+        <article class="card">
+          <h3>W zakresie</h3>
+          <ul>
+            <li>Natywny transport SOAP 1.2 i obsługa MTOM.</li>
+            <li>
+              Logowanie, sesja, wylogowanie i jednorazowe odzyskanie sesji.
+            </li>
+            <li>Wszystkie obecne wyszukiwania pojedyncze i zbiorcze.</li>
+            <li>Pełne raporty BIR1.2 i raporty zbiorcze BIR1.1.</li>
+            <li>Diagnostyka <code>GetValue</code> i mapowanie błędów.</li>
+            <li>
+              Kolekcje wyników, pluralne raporty oraz jawna obsługa
+              niejednoznaczności.
+            </li>
+            <li>
+              Własne DTO, ścisłe enumy, opcjonalne sumy kontrolne i wyjątki bez
+              typów GusApi.
+            </li>
+            <li>
+              Domyślny rozproszony limiter Laravel zgodny z budżetami GUS.
+            </li>
+            <li>Fixtures XML, testy różnicowe i testy sandboxa.</li>
+            <li>Dokumentacja migracji do <code>v2.0.0</code>.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Poza zakresem</h3>
+          <ul>
+            <li>Kopiowanie lub vendoring kodu GusApi.</li>
+            <li>Zmiana usługi SOAP GUS na nieistniejące API REST.</li>
+            <li>Automatyczne skanowanie kolejnych numerów REGON.</li>
+            <li>
+              Automatyczna sanitacja HTML, SQL lub CSV danych biznesowych;
+              biblioteka zachowuje wartości, a aplikacja zabezpiecza ich
+              docelowy kontekst.
+            </li>
+            <li>Generowanie klas PHP dla każdego pola wszystkich XSD.</li>
+            <li>Gwarantowanie dostępności zewnętrznej usługi GUS.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="reguly-gus" class="level2">
+      <h2>Reguły protokołu i usługi</h2>
+      <table>
+        <caption>
+          Reguły, których implementacja nie może zmienić
+        </caption>
+        <thead>
+          <tr>
+            <th>Obszar</th>
+            <th>Reguła GUS</th>
+            <th>Konsekwencja implementacyjna</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Transport</td>
+            <td class="business-rule">
+              SOAP 1.2, UTF-8, request <code>application/soap+xml</code>,
+              odpowiedź MTOM <code>application/xop+xml</code>, HTTPS i
+              WS-Addressing.
+            </td>
+            <td>
+              Transport libcurl musi wymuszać deadline całej wymiany, limit
+              strumienia i jednakowe reguły dekodowania na PHP 8.4-8.5.
+            </td>
+          </tr>
+          <tr>
+            <td>Klucz i sesja</td>
+            <td class="business-rule">
+              Klucz i <code>sid</code> mają po 20 znaków. Sesja wygasa po 60
+              minutach, może zostać zakończona około 03:20 i jest związana z IP
+              instancji.
+            </td>
+            <td>
+              Sesje pozostają lokalne dla klienta i środowiska; nie są
+              współdzielone ani serializowane.
+            </td>
+          </tr>
+          <tr>
+            <td>Wyszukiwanie</td>
+            <td class="business-rule">
+              Jedno żądanie używa dokładnie jednego z pól: KRS, KRS-y, NIP,
+              NIP-y, REGON, REGON-y 14-znakowe lub REGON-y 9-znakowe. Jeden
+              identyfikator może zwrócić wiele rekordów z różnych silosów.
+            </td>
+            <td>
+              Kryterium jest typowanym obiektem, a sprzeczne pola są niemożliwe
+              do skonstruowania. Także pojedyncze wyszukiwanie zwraca kolekcję
+              bez odrzucania kolejnych rekordów.
+            </td>
+          </tr>
+          <tr>
+            <td>Identyfikatory</td>
+            <td class="business-rule">
+              NIP i KRS mają 10 cyfr, REGON 9 albo 14 cyfr, zera wiodące są
+              znaczące. Batch zawiera maksymalnie 20 identyfikatorów.
+            </td>
+            <td>
+              Walidacja formatu odbywa się przed logowaniem i pierwszym
+              żądaniem. Kontrola sum NIP i REGON jest opcjonalna; dla REGON-14
+              sprawdza też osadzony REGON-9, natomiast KRS nie ma takiej sumy.
+            </td>
+          </tr>
+          <tr>
+            <td>Pusta odpowiedź</td>
+            <td class="business-rule">
+              Pusty wynik może oznaczać brak danych, błąd raportu albo wygasłą
+              sesję. Przyczynę należy sprawdzić przez <code>GetValue</code>.
+            </td>
+            <td>
+              Decoder nie mapuje automatycznie każdego pustego wyniku na
+              <code>not found</code> ani na wygaśnięcie sesji.
+            </td>
+          </tr>
+          <tr>
+            <td>Raport zbiorczy</td>
+            <td class="business-rule">
+              Obsługiwane są dni od wczoraj do siedmiu dni wstecz; dzień
+              bieżący, przyszłość i starsze daty zwracają błędy. Weekend może
+              zwrócić brak danych.
+            </td>
+            <td>
+              Data jest sprawdzana w strefie <code>Europe/Warsaw</code>, a brak
+              danych nie jest automatycznie awarią sesji.
+            </td>
+          </tr>
+          <tr>
+            <td>Limity</td>
+            <td class="business-rule">
+              08:00-16:59: 6000/h, 120/min, 3/s; 06:00-07:59 i 17:00-21:59:
+              8000/h, 150/min, 3/s; 22:00-05:59: 10000/h, 200/min, 4/s. Każdy
+              identyfikator batcha jest liczony osobno.
+            </td>
+            <td>
+              Domyślny klient Laravel rezerwuje koszt przed każdą operacją w
+              współdzielonym cache z atomowym lockiem. Konserwatywny lokalny
+              model waży koszt, używa czasu teoretycznego nadejścia podobnego
+              do GCRA dla limitu sekundowego oraz stałych okien kalendarzowych
+              dla limitów minutowego i godzinowego w czasie
+              <code>Europe/Warsaw</code>. To ochrona wyprowadzona z
+              opublikowanych limitów, nie dokładny model nieopublikowanego
+              algorytmu serwera GUS. Login, <code>GetValue</code>, raport i
+              logout kosztują po jednej jednostce, a batch tyle jednostek, ile
+              ma identyfikatorów.
+            </td>
+          </tr>
+          <tr>
+            <td>Zakaz enumeracji</td>
+            <td class="business-rule">
+              Automatyczne odpytywanie kolejnych identyfikatorów w celu pobrania
+              rejestru jest niedozwolone.
+            </td>
+            <td>
+              Pakiet nie udostępnia crawlera, generatora zakresów ani
+              automatycznej paginacji po identyfikatorach.
+            </td>
+          </tr>
+          <tr>
+            <td>Dane niezaufane</td>
+            <td class="business-rule">
+              Nazwy i inne wartości REGON mogą zawierać fragmenty interpretowane
+              jako HTML, SQL albo formuły arkusza kalkulacyjnego.
+            </td>
+            <td>
+              Parser i normalizer zachowują dane, ale dokumentacja wymaga
+              escaping outputu, parametryzowanych zapytań oraz neutralizacji
+              prefiksów formuł przy eksporcie CSV.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="stan-obecny" class="level2">
+      <h2>Stan przed implementacją i sprzężenia</h2>
+      <p>
+        Przed wersją 2 główne API pakietu było własne, lecz siedem plików
+        produkcyjnych importowało typy GusApi. Poniższa tabela zachowuje zapis
+        punktów, które zostały odłączone w bieżącej implementacji.
+      </p>
+      <table>
+        <caption>
+          Elementy wymagające odłączenia
+        </caption>
+        <thead>
+          <tr>
+            <th>Element</th>
+            <th>Obecne sprzężenie</th>
+            <th>Stan docelowy</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>composer.json</code></td>
+            <td><code>gusapi/gusapi:^6.3</code> w runtime.</td>
+            <td>
+              <code>ext-curl</code>, <code>ext-dom</code> i
+              <code>ext-libxml</code> zadeklarowane bezpośrednio. HTTPS i TLS
+              realizuje <code>ext-curl</code> przez backend libcurl;
+              <code>ext-openssl</code> nie jest wymaganiem platformy pakietu.
+            </td>
+          </tr>
+          <tr>
+            <td><code>BirClient</code></td>
+            <td>
+              Operuje na <code>GusApi</code>, <code>SearchReport</code> i
+              wyjątkach zależności.
+            </td>
+            <td>Operuje wyłącznie na <code>BirGatewayInterface</code>.</td>
+          </tr>
+          <tr>
+            <td><code>GusApiFactoryInterface</code></td>
+            <td>Zwraca publiczny typ <code>GusApi\GusApi</code>.</td>
+            <td>
+              Usunięty w v2; zastąpiony neutralnym kontraktem gateway/transport.
+            </td>
+          </tr>
+          <tr>
+            <td><code>CompanyData</code></td>
+            <td>Publiczny mapper <code>fromGusApiResult()</code>.</td>
+            <td>Własny mapper z wewnętrznego rekordu wyszukiwania.</td>
+          </tr>
+          <tr>
+            <td><code>FullCompanyReportData</code></td>
+            <td>Publiczny mapper przyjmujący <code>SearchReport</code>.</td>
+            <td>Fabryka nie zależy od zewnętrznego typu.</td>
+          </tr>
+          <tr>
+            <td><code>ReportType</code> i <code>BulkReportType</code></td>
+            <td>Backing values pochodzą ze stałych GusApi.</td>
+            <td>Wartości wynikają wprost z dokumentacji GUS.</td>
+          </tr>
+          <tr>
+            <td>Testy i dokumentacja</td>
+            <td>
+              Fake dziedziczy po GusApi, dokumentacja opisuje jego factory.
+            </td>
+            <td>
+              Fake implementuje własny gateway, a dokumentacja opisuje neutralny
+              punkt rozszerzeń.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="architektura" class="level2">
+      <h2>Architektura docelowa</h2>
+      <pre><code>Facade / fluent builders
+          |
+          v
+BirClientInterface -&gt; BirClient
+                         |
+                         v
+                  BirGatewayInterface
+                    |             |
+                    v             v
+             BirSessionState   Response decoders
+                    |             |
+                    +------v------+
+                           |
+                    BirSoapTransport
+                      |          |
+                      v          v
+              Request limiter  ext-curl + HTTPS
+                      |          |
+                      +-----v----+
+                           |
+                     GUS BIR1.2</code></pre>
+
+      <table>
+        <caption>
+          Odpowiedzialności komponentów
+        </caption>
+        <thead>
+          <tr>
+            <th>Komponent</th>
+            <th>Odpowiedzialność</th>
+            <th>Widoczność</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>BirGatewayInterface</code></td>
+            <td>
+              Neutralne operacje wyszukiwania, raportów i diagnostyki. Nie zna
+              SOAP ani klas GusApi.
+            </td>
+            <td>Publiczny punkt rozszerzeń v2.</td>
+          </tr>
+          <tr>
+            <td><code>NativeBirGateway</code></td>
+            <td>
+              Koordynuje sesję, diagnostykę pustych wyników, jeden retry i
+              dekodery, zachowując wszystkie rekordy dla jednego identyfikatora.
+              Wielowywołaniową sekwencję limitera obejmuje jawnymi
+              <code>beginRateLimitScope()</code> i
+              <code>endRateLimitScope()</code> w <code>try/finally</code>, bez
+              bound closure przechwytującego klienta albo sesję.
+            </td>
+            <td>Implementacja pakietu.</td>
+          </tr>
+          <tr>
+            <td><code>BirSoapTransportInterface</code></td>
+            <td>
+              Wysyła pojedynczą operację z właściwymi WS-Addressing, endpointem
+              i opcjonalnym <code>sid</code>.
+            </td>
+            <td>Publiczny punkt rozszerzeń v2.</td>
+          </tr>
+          <tr>
+            <td><code>NativeSoapTransport</code></td>
+            <td>
+              Budowa koperty oraz delegacja do ograniczonego sendera cURL; TLS,
+              deadline, Content-Type, framing HTTP i odbiór MIME/MTOM. Jeden
+              resetowany uchwyt zachowuje cache połączeń, DNS i sesji TLS, ale
+              usuwa stan żądania oraz SID. Nagłówki z opcjonalnym SID i koperta
+              XML przechodzą przez krótką granicę
+              <code>NativeCurlExecutor::execute()</code> jako parametry
+              <code>#[SensitiveParameter]</code>; sender resetuje uchwyt po
+              wykonaniu w <code>finally</code>.
+            </td>
+            <td>Implementacja wewnętrzna.</td>
+          </tr>
+          <tr>
+            <td><code>BirOperation</code></td>
+            <td>
+              Enum operacji, action URI, namespace i informacja, czy wymagany
+              jest <code>sid</code>.
+            </td>
+            <td>Wewnętrzny model protokołu.</td>
+          </tr>
+          <tr>
+            <td><code>SearchCriteria</code></td>
+            <td>
+              Rozłączny typ dla siedmiu wariantów kryterium, walidacja długości,
+              cyfr i limitu 20 oraz opcjonalna kontrola sum NIP/REGON.
+            </td>
+            <td>Wewnętrzny model żądania.</td>
+          </tr>
+          <tr>
+            <td><code>SearchResult</code> / <code>CompanyData</code></td>
+            <td>
+              Ścisłe enumy typu i silosu, nullable status NIP i rzeczywisty
+              REGON-14 oraz walidacja kalendarzowa wartości
+              <code>xs:date</code>: <code>YYYY-MM-DD</code> z opcjonalnym
+              <code>Z</code> albo offsetem.
+            </td>
+            <td>Kontrakt protokołu i publiczne DTO.</td>
+          </tr>
+          <tr>
+            <td>Decodery</td>
+            <td>
+              Rozpakowanie odpowiedzi SOAP/MTOM, odczyt CDATA XML, błędów,
+              rekordów wyszukiwania i raportów.
+            </td>
+            <td>Małe, osobno testowane klasy.</td>
+          </tr>
+          <tr>
+            <td><code>FullReportNormalizer</code></td>
+            <td>
+              Buduje typowane DTO wspólnych struktur raportu, pozostawiając
+              równolegle niezmienione surowe wiersze. Liczniki mapuje do
+              nullable <code>int</code>, a puste lub unknown-only wiersze nie
+              tworzą pozornych komponentów projekcji.
+            </td>
+            <td>Mapper domenowy bez sanitacji wartości.</td>
+          </tr>
+          <tr>
+            <td><code>CacheBirRequestLimiter</code></td>
+            <td>
+              Konserwatywnie rezerwuje ważony budżet sekundowy i stałe okna
+              minutowe oraz godzinowe, osobno dla środowiska i skrótu klucza.
+              Wymaga dokładnej klasy <code>Illuminate\Cache\Repository</code>
+              i store z jawnej allowlisty.
+            </td>
+            <td>Domyślna integracja Laravel; jawny kontrakt limitera.</td>
+          </tr>
+          <tr>
+            <td><code>BirSessionState</code></td>
+            <td>
+              Przechowuje <code>sid</code> tylko w pamięci, osobno dla produkcji
+              i sandboxa, bez serializacji.
+            </td>
+            <td>Wewnętrzny stan klienta.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="business-logic-block">
+        Produkcja i sandbox muszą mieć osobne instancje transportu, klucza oraz
+        sesji. Żaden fallback nie może wysłać produkcyjnego klucza do endpointu
+        testowego ani odwrotnie.
+      </div>
+    </section>
+
+    <section id="protokol" class="level2">
+      <h2>Warstwa SOAP i operacje</h2>
+      <h3>Stałe protokołu</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Element</th>
+            <th>Wartość</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>SOAP envelope</td>
+            <td><code>http://www.w3.org/2003/05/soap-envelope</code></td>
+          </tr>
+          <tr>
+            <td>WS-Addressing</td>
+            <td><code>http://www.w3.org/2005/08/addressing</code></td>
+          </tr>
+          <tr>
+            <td>Public API namespace</td>
+            <td><code>http://CIS/BIR/PUBL/2014/07</code></td>
+          </tr>
+          <tr>
+            <td>Data contract</td>
+            <td><code>http://CIS/BIR/PUBL/2014/07/DataContract</code></td>
+          </tr>
+          <tr>
+            <td><code>GetValue</code> namespace</td>
+            <td><code>http://CIS/BIR/2014/07</code></td>
+          </tr>
+          <tr>
+            <td>Test endpoint</td>
+            <td>
+              <code
+                >https://wyszukiwarkaregontest.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc</code
+              >
+            </td>
+          </tr>
+          <tr>
+            <td>Production endpoint</td>
+            <td>
+              <code
+                >https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc</code
+              >
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Operacje</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Operacja</th>
+            <th>Wejście</th>
+            <th>Sesja</th>
+            <th>Wynik domenowy</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Zaloguj</code></td>
+            <td><code>pKluczUzytkownika</code></td>
+            <td>Bez nagłówka <code>sid</code>.</td>
+            <td>20-znakowy <code>sid</code> albo błąd uwierzytelnienia.</td>
+          </tr>
+          <tr>
+            <td><code>DaneSzukajPodmioty</code></td>
+            <td><code>pParametryWyszukiwania</code></td>
+            <td>Wymaga nagłówka <code>sid</code>.</td>
+            <td>
+              Lista wszystkich wewnętrznych rekordów wyszukiwania, również dla
+              pojedynczego identyfikatora i wielu silosów.
+            </td>
+          </tr>
+          <tr>
+            <td><code>DanePobierzPelnyRaport</code></td>
+            <td><code>pRegon</code>, <code>pNazwaRaportu</code></td>
+            <td>Wymaga nagłówka <code>sid</code>.</td>
+            <td>
+              Surowe wiersze raportu mapowane dodatkowo do znormalizowanego DTO
+              albo typowany błąd raportu.
+            </td>
+          </tr>
+          <tr>
+            <td><code>DanePobierzRaportZbiorczy</code></td>
+            <td><code>pDataRaportu</code>, <code>pNazwaRaportu</code></td>
+            <td>Wymaga nagłówka <code>sid</code>.</td>
+            <td>Lista numerów REGON lub typowany błąd daty/obciążenia.</td>
+          </tr>
+          <tr>
+            <td><code>GetValue</code></td>
+            <td><code>pNazwaParametru</code></td>
+            <td>
+              <code>StatusUslugi</code> i <code>KomunikatUslugi</code> bez
+              sesji; pozostałe parametry z <code>sid</code>.
+            </td>
+            <td>Status, komunikat, data albo stan sesji.</td>
+          </tr>
+          <tr>
+            <td><code>Wyloguj</code></td>
+            <td><code>pIdentyfikatorSesji</code></td>
+            <td>Nagłówek i parametr z aktualnym <code>sid</code>.</td>
+            <td>
+              Wartość bool albo typowany błąd; lokalny SID jest zawsze
+              czyszczony, bez retry i ponownego logowania.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Wynik spike'u transportowego</h3>
+      <p>
+        Spike odrzucił <code>SoapClient</code> i zdalne WSDL na rzecz libcurl.
+        Decyzję zapisuje ADR oparty na poniższych kryteriach:
+      </p>
+      <ul>
+        <li>
+          poprawne WS-Addressing dla zwykłych operacji i <code>GetValue</code>;
+        </li>
+        <li>
+          poprawny odbiór <code>multipart/related; application/xop+xml</code>;
+        </li>
+        <li>
+          krótka granica I/O przyjmująca nagłówki i XML jako
+          <code>#[SensitiveParameter]</code>, brak tych wartości w backtrace
+          globalnego handlera błędów oraz natychmiastowy reset uchwytu;
+        </li>
+        <li>
+          deadline całej wymiany, limit strumienia, ścisłe HTTP 200,
+          Content-Type i framing;
+        </li>
+        <li>brak zależności testów jednostkowych od sieci i zdalnego WSDL;</li>
+        <li>
+          jasne pochodzenie i prawo ponownego użycia, jeśli WSDL zostanie
+          dołączony do paczki.
+        </li>
+      </ul>
+      <p class="callout">
+        Wybrano oryginalny, minimalny adapter protokołu. Oficjalne WSDL/XSD są
+        źródłem weryfikacji, ale nie są kopiowane do dystrybucji ani pobierane w
+        runtime.
+      </p>
+    </section>
+
+    <section id="raporty" class="level2">
+      <h2>Raporty BIR1.2</h2>
+      <p>
+        Enumy pakietu otrzymują własne backing values zgodne z tabelą raportów
+        GUS. Kombinacje <code>Typ</code>, <code>SilosID</code> i długość REGON
+        są walidowane przed wywołaniem pełnego raportu.
+      </p>
+      <p>
+        Typ podmiotu jest reprezentowany przez <code>EntityType</code> z
+        przypadkami <code>LegalUnit</code>, <code>NaturalPerson</code>,
+        <code>LegalUnitLocalUnit</code> i
+        <code>NaturalPersonLocalUnit</code>. Silos 6 to
+        <code>Silo::LegalUnits</code>, a niepusty status NIP jest nullable
+        <code>NipStatus</code>. Pole REGON-14 jest ustawiane wyłącznie dla
+        rzeczywiście zwróconego numeru 14-cyfrowego. Data zakończenia
+        działalności musi przejść pełną walidację leksykalną i kalendarzową
+        <code>xs:date</code>; obsługiwane są <code>YYYY-MM-DD</code>, suffix
+        <code>Z</code> i poprawny offset strefy czasowej.
+      </p>
+      <table>
+        <caption>
+          Zakres pełnych raportów
+        </caption>
+        <thead>
+          <tr>
+            <th>Typ / silos</th>
+            <th>Rodziny raportów</th>
+            <th>Decyzja v2</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>F / 1, 2, 3, REGON9</td>
+            <td>
+              Dane ogólne, CEIDG, rolnicza, pozostała, lista jednostek, PKD.
+            </td>
+            <td>Warianty <code>BIR12*</code>.</td>
+          </tr>
+          <tr>
+            <td>F / 4, REGON9</td>
+            <td>Działalność skreślona przed 2014-11-08.</td>
+            <td>
+              Użyć opublikowanej nazwy
+              <code>BIR12OsFizycznaDzialalnoscSkreslonaDo20141108</code>.
+            </td>
+          </tr>
+          <tr>
+            <td>LF / 1, 2, 3, REGON14</td>
+            <td>Dane jednostki lokalnej osoby fizycznej i PKD.</td>
+            <td>Warianty <code>BIR12*</code>.</td>
+          </tr>
+          <tr>
+            <td>P / 6, REGON9</td>
+            <td>
+              Osoba prawna, PKD, lista jednostek lokalnych, wspólnicy spółki
+              cywilnej, typ podmiotu.
+            </td>
+            <td>Warianty <code>BIR12*</code>.</td>
+          </tr>
+          <tr>
+            <td>LP / 6, REGON14</td>
+            <td>Dane jednostki lokalnej osoby prawnej i PKD.</td>
+            <td>
+              Zachować <code>BIR12JednLokalnaOsPrawnej</code> i dodać osobny
+              przypadek <code>BIR121JednLokalnaOsPrawnej</code> z NIP oraz
+              statusem NIP.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="business-logic-block">
+        Nie wolno automatycznie wybierać raportu dla innego typu lub silosu, gdy
+        oficjalna macierz wskazuje niezgodność. Taki przypadek ma zakończyć się
+        lokalnym wyjątkiem walidacji bez zużycia limitu GUS.
+      </div>
+      <div class="business-logic-block">
+        Identyfikator może wskazywać kilka zgodnych rekordów. Metoda pluralna
+        pobiera raport dla każdego unikalnego REGON-u raportowego, natomiast
+        metoda singularna zgłasza <code>BirAmbiguousResultException</code>, gdy
+        nie może dokonać jednoznacznego wyboru.
+      </div>
+      <p>
+        <code>FullCompanyReportData</code> przechowuje wybrany
+        <code>ReportType</code>, niezmienione <code>reportData</code> oraz
+        <code>NormalizedFullReportData</code>. Normalizacja obejmuje wspólne
+        dane podmiotu, adres, kontakt, rejestr, formę prawną, cykl działalności,
+        jednostki lokalne, PKD, wspólników i typ jednostki. Nieznane lub przyszłe
+        pola XSD pozostają dostępne w surowych wierszach. Daty cyklu życia są
+        nullable <code>DateTimeImmutable</code>, stan używa
+        <code>ActivityStatus</code>, a wersja klasyfikacji PKD pozostaje
+        nullable <code>string</code> o długości najwyżej 8 znaków. Otwarty typ
+        pozwala zachować przyszłe oznaczenia GUS bez przedwczesnego zamykania
+        ich w enumie. Liczba jednostek lokalnych oraz cztery liczniki rodzajów
+        działalności są nullable <code>int</code>. Pusty albo unknown-only
+        wiersz jest nadal zachowany w <code>reportData</code>, ale nie tworzy
+        fantomowego komponentu ani elementu listy w
+        <code>normalized</code>.
+      </p>
+      <p>
+        Sześć raportów zbiorczych pozostaje pod oficjalnymi nazwami
+        <code>BIR11*</code>, ponieważ dokumentacja BIR1.2 wskazuje, że ich
+        struktury nie uległy zmianie.
+      </p>
+    </section>
+
+    <section id="sesja-bledy" class="level2">
+      <h2>Sesja, diagnostyka i błędy</h2>
+      <h3>Algorytm operacji uwierzytelnionej</h3>
+      <ol>
+        <li>Walidacja wejścia bez połączenia sieciowego.</li>
+        <li>
+          Rezerwacja budżetu limitera przed każdą rzeczywistą operacją SOAP.
+        </li>
+        <li>Użycie istniejącej sesji albo jednokrotne <code>Zaloguj</code>.</li>
+        <li>Wysłanie operacji z lokalnym <code>sid</code>.</li>
+        <li>Dekodowanie jawnego wyniku albo osadzonego XML błędu.</li>
+        <li>
+          Dla pustego wyniku: <code>GetValue(StatusSesji)</code> i
+          <code>GetValue(KomunikatKod)</code> z tym samym <code>sid</code>.
+        </li>
+        <li>
+          Jeśli sesja wygasła: wyzerowanie stanu, ponowne logowanie i dokładnie
+          jedna próba ponowienia operacji.
+        </li>
+        <li>
+          Jeśli sesja jest aktywna: mapowanie komunikatu na brak danych albo
+          wyjątek protokołu bez retry.
+        </li>
+      </ol>
+      <p>
+        Każde logowanie, wywołanie <code>GetValue</code>, retry i wylogowanie
+        przechodzi przez ten sam limiter. Poza wewnętrznym scope pojedyncze
+        <code>acquire()</code> może wykonać pacing długu sekundowego łącznie do
+        1 sekundy, poza lockiem. Gateway oznacza sekwencję przez jawne
+        <code>beginRateLimitScope()</code> i
+        <code>endRateLimitScope()</code> w <code>try/finally</code>, bez bound
+        closure. Po pierwszej udanej rezerwacji w scope każde następne,
+        wewnętrzne <code>acquire()</code> może czekać łącznie do 7 sekund.
+        Recovery obejmuje kilka takich wywołań, więc cała operacja może trwać
+        dłużej niż 7 sekund. Wyczerpanie stałego okna minutowego lub godzinowego
+        nie jest pacingowane i zgłasza <code>BirRateLimitException</code> przed
+        siecią.
+      </p>
+      <p>
+        Limiter wymaga obiektu o dokładnej klasie
+        <code>Illuminate\Cache\Repository</code>. Store musi implementować
+        <code>LockProvider</code> i należeć do allowlisty:
+        <code>ArrayStore</code>, <code>DatabaseStore</code>,
+        <code>FileStore</code>, <code>MemcachedStore</code> lub
+        <code>RedisStore</code>. Dekoratory i pozostałe backendy, w tym
+        <code>TaggedCache</code>, <code>DynamoDbStore</code>,
+        <code>FailoverStore</code>, <code>MemoizedStore</code> i
+        <code>NullStore</code>, kończą operację fail closed. Lease locka wynosi
+        30 sekund, a contention czeka najwyżej 1 sekundę. Dla wielu hostów
+        zalecany jest jeden współdzielony Redis; store lokalny nie koordynuje
+        hostów.
+      </p>
+
+      <table>
+        <caption>
+          Kody wymagające jawnego mapowania
+        </caption>
+        <thead>
+          <tr>
+            <th>Kod</th>
+            <th>Znaczenie</th>
+            <th>Wynik pakietu</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0</td>
+            <td>Poprzednia operacja poprawna.</td>
+            <td>Brak wyjątku.</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>Za dużo identyfikatorów.</td>
+            <td>Lokalna walidacja powinna uniemożliwić wysłanie.</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>Brak podmiotu albo brak danych raportu zbiorczego.</td>
+            <td>
+              <code>BirNotFoundException</code> dla wyszukiwania; jawna pusta
+              kolekcja lub typowany wynik dla raportu zbiorczego.
+            </td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>Nieprawidłowa nazwa raportu lub identyfikator.</td>
+            <td><code>BirProtocolException</code>.</td>
+          </tr>
+          <tr>
+            <td>7 lub pusty</td>
+            <td>Brak albo wygaśnięcie sesji.</td>
+            <td>Jedno odnowienie i jeden retry.</td>
+          </tr>
+          <tr>
+            <td>11</td>
+            <td>Brak PKD dla podmiotu skreślonego przed 2014-11-08.</td>
+            <td>Typowany wyjątek raportu z bezpiecznym komunikatem.</td>
+          </tr>
+          <tr>
+            <td>21 / 22</td>
+            <td>Brak spółki cywilnej albo danych wspólników.</td>
+            <td>Typowany brak danych raportu, bez udawania awarii sesji.</td>
+          </tr>
+          <tr>
+            <td>101</td>
+            <td>Za dużo równolegle generowanych raportów zbiorczych.</td>
+            <td>
+              Wyjątek tymczasowej niedostępności, bez automatycznej pętli.
+            </td>
+          </tr>
+          <tr>
+            <td>102-105</td>
+            <td>Bieżąca/przyszła/stara data albo zła nazwa raportu.</td>
+            <td>Lokalna walidacja lub <code>BirProtocolException</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="bezpieczenstwo" class="level2">
+      <h2>Bezpieczeństwo</h2>
+      <ul>
+        <li>
+          Klucz API i <code>sid</code> są oznaczane
+          <code>#[SensitiveParameter]</code> na wszystkich kontrolowanych
+          granicach wywołań.
+        </li>
+        <li>
+          <code>NativeCurlExecutor</code> przyjmuje nagłówki z opcjonalnym SID
+          oraz XML przez celowo krótką granicę I/O. Oba argumenty są
+          <code>#[SensitiveParameter]</code>; executor ustawia opcje i wykonuje
+          cURL, a <code>CurlBirHttpSender</code> resetuje uchwyt w
+          <code>finally</code>.
+        </li>
+        <li>
+          Wyjątki publiczne nie zawierają klucza, <code>sid</code>, koperty SOAP
+          ani obiektu klienta w wiadomości, kontekście i łańcuchu przyczyn.
+        </li>
+        <li>
+          Klient, gateway, sesja, transport i buildery serializują się wyłącznie
+          jako pusty, bezsekretowy tombstone, który odrzuca późniejsze użycie i
+          pozostaje bezpieczny podczas inspekcji debuggera.
+        </li>
+        <li>
+          Endpoint wynika wyłącznie z enumu środowiska; brak dowolnego URL z
+          konfiguracji użytkownika ogranicza SSRF.
+        </li>
+        <li>
+          TLS jest weryfikowany, a opcje wyłączające weryfikację nie trafiają do
+          publicznej konfiguracji.
+        </li>
+        <li>
+          Zagnieżdżony XML jest parsowany z <code>LIBXML_NONET</code>, bez DTD i
+          bez ekspansji encji; rozmiar odpowiedzi jest ograniczony przed
+          parsowaniem.
+        </li>
+        <li>
+          Timeout połączenia i całej operacji jest skończony oraz testowany.
+        </li>
+        <li>
+          Wszystkie stringi zwrócone przez GUS są niezaufane: surowe i
+          znormalizowane dane REGON, nazwy, komunikaty diagnostyczne oraz
+          komunikaty statusu usługi. Dokumentacja wymaga kodowania właściwego
+          dla HTML, zapytań parametryzowanych, parsowania URL-i z allowlistą
+          schematów HTTP/HTTPS, walidacji adresów przed utworzeniem
+          <code>mailto:</code>, ochrony eksportu CSV przed wartościami
+          zaczynającymi się od <code>=</code>, <code>+</code>, <code>-</code>
+          lub <code>@</code>, tabulatora albo znaku CR oraz neutralizacji znaków
+          sterujących i pól strukturalnych przy logowaniu, aby zapobiec log
+          forging. Normalizer nie deklaruje uniwersalnej sanitacji.
+        </li>
+      </ul>
+      <div class="business-logic-block">
+        Żaden tryb diagnostyczny nie może utrwalać pełnej koperty logowania.
+        Debugowanie transportu może zapisywać wyłącznie nazwę operacji, czas,
+        endpoint środowiska, lokalny kod błędu i identyfikator korelacji bez
+        sekretów. Komunikat diagnostyczny lub statusu usługi z GUS wymaga przed
+        logowaniem neutralizacji jak każdy inny niezaufany tekst.
+      </div>
+    </section>
+
+    <section id="testy" class="level2">
+      <h2>Strategia testów</h2>
+      <div class="card-grid">
+        <article class="card">
+          <h3>Deterministyczne</h3>
+          <ul>
+            <li>Fixtures kopert SOAP i osadzonego XML.</li>
+            <li>Unit tests walidatorów i decoderów.</li>
+            <li>Contract tests z fake transportem.</li>
+            <li>
+              Testy kolekcji wielosilosowych, pluralnych raportów i
+              niejednoznaczności.
+            </li>
+            <li>
+              Testy enumów, dat, normalizacji i opcjonalnych sum kontrolnych.
+            </li>
+            <li>Testy limitera, sesji, retry i ważonej liczby żądań.</li>
+            <li>Testy bezpieczeństwa wyjątków i serializacji.</li>
+            <li>Cała macierz Laravel/PHP w CI.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Zewnętrzne</h3>
+          <ul>
+            <li>
+              Przegląd kompatybilności wobec GusApi 6.3.2 bez pozostawiania
+              zależności runtime ani dev.
+            </li>
+            <li>Smoke tests na oficjalnym sandboxie.</li>
+            <li>
+              Manualny lub harmonogramowy workflow, nie required PR check.
+            </li>
+            <li>Brak sekretu produkcyjnego w GitHub Actions.</li>
+          </ul>
+        </article>
+      </div>
+
+      <table>
+        <caption>
+          Kluczowe scenariusze Given/When/Then
+        </caption>
+        <thead>
+          <tr>
+            <th>Given</th>
+            <th>When</th>
+            <th>Then</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Poprawny klucz i odpowiedź logowania z 20-znakowym SID.</td>
+            <td>Klient wykonuje pierwszą operację uwierzytelnioną.</td>
+            <td>Loguje się raz i dodaje SID tylko do właściwego żądania.</td>
+          </tr>
+          <tr>
+            <td>Pusty wynik logowania.</td>
+            <td>Klient próbuje uzyskać sesję.</td>
+            <td>
+              Rzuca bezpieczny <code>BirAuthenticationException</code> bez
+              klucza w wiadomości i trace.
+            </td>
+          </tr>
+          <tr>
+            <td>Każdy z siedmiu wariantów kryterium wyszukiwania.</td>
+            <td>Budowana jest koperta SOAP.</td>
+            <td>
+              Wysłane jest dokładnie jedno pole we właściwej kolejności WSDL.
+            </td>
+          </tr>
+          <tr>
+            <td>Batch większy niż 20 albo identyfikator o złym formacie.</td>
+            <td>Wywoływane jest publiczne API wyszukiwania.</td>
+            <td>Walidacja kończy operację przed logowaniem i siecią.</td>
+          </tr>
+          <tr>
+            <td>Jeden NIP zwracający rekordy z dwóch silosów.</td>
+            <td>Wywoływane jest pojedyncze wyszukiwanie fluent.</td>
+            <td>Kolekcja zawiera oba rekordy w kolejności GUS.</td>
+          </tr>
+          <tr>
+            <td>Dwa zgodne, odrębne REGON-y raportowe dla identyfikatora.</td>
+            <td>Wywoływana jest pluralna, a następnie singularna metoda raportu.</td>
+            <td>
+              Pluralna zwraca oba raporty, a singularna zgłasza
+              <code>BirAmbiguousResultException</code> bez arbitralnego wyboru.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Odpowiedź z nieznanym typem, silosem, statusem NIP, sztucznym
+              REGON-14 albo niemożliwą datą.
+            </td>
+            <td>Decoder buduje wynik wyszukiwania.</td>
+            <td>
+              Enumy i data są ścisłe, a nullable pola wynikają tylko z
+              rzeczywiście obecnych wartości protokołu.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Raport zawiera znane pola oraz przyszłe pole z tekstem wyglądającym
+              jak HTML, SQL lub formuła CSV.
+            </td>
+            <td>Normalizer buduje <code>FullCompanyReportData</code>.</td>
+            <td>
+              Typowane DTO powstaje, surowe pole pozostaje bez zmian, a żaden z
+              wyników nie jest przedstawiany jako sanitizowany.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Raport zawiera liczniki w leksykalnej postaci
+              <code>xs:int</code> oraz puste lub wyłącznie nieznane wiersze.
+            </td>
+            <td>Normalizer buduje projekcję DTO obok danych surowych.</td>
+            <td>
+              Liczniki są nullable <code>int</code>, surowe wiersze pozostają
+              bez zmian, a puste i unknown-only wiersze nie tworzą fantomowych
+              komponentów ani elementów list.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Dwa klienty Laravel współdzielą cache i klucz, a batch ma 20
+              identyfikatorów.
+            </td>
+            <td>Transporty próbują zarezerwować budżet GUS.</td>
+            <td>
+              Wspólny licznik uwzględnia koszt 20; przekroczenie zatrzymuje
+              sieć przez <code>BirRateLimitException</code> z czasem retry.
+            </td>
+          </tr>
+          <tr>
+            <td>Pusta odpowiedź i <code>StatusSesji=0</code>.</td>
+            <td>Gateway diagnozuje wynik.</td>
+            <td>Odnawia sesję i ponawia pierwotną operację dokładnie raz.</td>
+          </tr>
+          <tr>
+            <td>
+              Pusta odpowiedź, aktywna sesja i <code>KomunikatKod=4</code>.
+            </td>
+            <td>Wykonano wyszukiwanie.</td>
+            <td>
+              Zwracany jest <code>BirNotFoundException</code> bez relogowania.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Drugie wywołanie po odnowieniu sesji również wskazuje wygaśnięcie.
+            </td>
+            <td>Gateway kończy retry.</td>
+            <td>Nie powstaje pętla; zwracany jest bezpieczny wyjątek.</td>
+          </tr>
+          <tr>
+            <td>Typ, SilosID i REGON zgodne z oficjalną macierzą raportów.</td>
+            <td>Pobierany jest pełny raport.</td>
+            <td>Wybrana nazwa BIR12/BIR121 i zdekodowane pola są poprawne.</td>
+          </tr>
+          <tr>
+            <td>
+              Raport zbiorczy dla bieżącej, przyszłej lub zbyt starej daty.
+            </td>
+            <td>Wywoływany jest builder raportu.</td>
+            <td>Operacja kończy się lokalnie bez zużycia limitu GUS.</td>
+          </tr>
+          <tr>
+            <td>Odpowiedź MTOM, CDATA XML, pusty XML albo uszkodzony XML.</td>
+            <td>Decoder przetwarza odpowiedź.</td>
+            <td>
+              Poprawne dane są zwracane, a błędy są typowane i nie ujawniają
+              surowego body.
+            </td>
+          </tr>
+          <tr>
+            <td>Dwa kolejne żądania mają inne body, callbacki i SID.</td>
+            <td>Sender resetuje i ponownie wykorzystuje uchwyt cURL.</td>
+            <td>
+              Drugie żądanie nie dziedziczy danych pierwszego, a libcurl może
+              zachować cache połączenia, DNS i sesji TLS.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Historyczny, jednolicie wcięty framing MIME oraz jego
+              niejednoznaczne warianty.
+            </td>
+            <td>Decoder wybiera ścieżkę kompatybilności.</td>
+            <td>
+              Pojedyncza odpowiedź GusApi 6.3.2 jest dekodowana, a duplikaty
+              delimiterów i mieszane wcięcia są odrzucane.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Odpowiedź bez akcji WS-Addressing albo z <code>xsi:nil</code> dla
+              nienullowalnego wyniku <code>GetValue</code> lub logout.
+            </td>
+            <td>Decoder waliduje kontrakt odpowiedzi względem WSDL.</td>
+            <td>
+              Odpowiedź jest klasyfikowana jako błąd protokołu bez uruchamiania
+              odnowienia sesji.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Zdeserializowany, bezsekretowy tombstone odpowiedzi transportu.
+            </td>
+            <td>Debugger lub reporter błędów próbuje wyświetlić obiekt.</td>
+            <td>
+              Inspekcja nie rzuca błędu i pokazuje wyłącznie pola oznaczone jako
+              niedostępne.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Poprawny wewnętrzny XML raportu ma od 5 do 10 MB, a gateway jest
+              utworzony ręcznie z wartościami domyślnymi.
+            </td>
+            <td>Gateway dekoduje raport.</td>
+            <td>
+              Ten sam domyślny limit 10 MB obowiązuje SOAP/MIME i wewnętrzny
+              XML; poprawny raport nie jest błędnie klasyfikowany jako
+              malformed.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <code>zend.exception_ignore_args=0</code> i unikalne canary.
+            </td>
+            <td>Transport, parser albo logowanie rzuca wyjątek.</td>
+            <td>
+              Klucz, SID, request body i klient nie występują w całym grafie
+              wyjątku.
+            </td>
+          </tr>
+          <tr>
+            <td>Jednocześnie używane klienty produkcyjny i sandboxowy.</td>
+            <td>Oba wykonują operacje i odnawiają sesje.</td>
+            <td>
+              Klucze, endpointy oraz SID nigdy nie przechodzą między nimi.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Rozszerzenie obecnego sandbox suite</h3>
+      <ul>
+        <li>zachować status usługi/danych oraz NIP, REGON, KRS i batche;</li>
+        <li>
+          dodać wyszukiwanie batch REGON14, jeśli fixture sandboxa je wspiera;
+        </li>
+        <li>
+          sprawdzić po jednym osiągalnym raporcie dla typów F, P, LF i LP;
+        </li>
+        <li>sprawdzić raport BIR121, gdy sandbox posiada odpowiedni rekord;</li>
+        <li>sprawdzić invalid key bez ujawniania użytej wartości;</li>
+        <li>
+          nie wymagać niepustego raportu zbiorczego, jeśli nieaktualizowany
+          sandbox nie zawiera danych z ostatnich siedmiu dni.
+        </li>
+      </ul>
+    </section>
+
+    <section id="migracja" class="level2">
+      <h2>Migracja i kompatybilność</h2>
+      <table>
+        <caption>
+          Kontrakt wersji 2.0
+        </caption>
+        <thead>
+          <tr>
+            <th>Obszar</th>
+            <th>Zachować</th>
+            <th>Zmienić lub usunąć</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Fluent API</td>
+            <td>
+              Facade, <code>sandbox()</code>, wyszukiwania, raporty i
+              diagnostyka.
+            </td>
+            <td>
+              Pojedyncze wyszukiwanie zwraca kolekcję; dodać
+              <code>getFullReports()</code>, a singularny raport zgłasza
+              niejednoznaczność.
+            </td>
+          </tr>
+          <tr>
+            <td>Wyniki</td>
+            <td>
+              <code>CompanyData</code>, <code>FullCompanyReportData</code>,
+              <code>BulkReportData</code>, status i diagnostyka.
+            </td>
+            <td>
+              Usunąć fabryki GusApi; zastosować ścisłe enumy oraz dodać surowe
+              wiersze obok znormalizowanego DTO raportu.
+            </td>
+          </tr>
+          <tr>
+            <td>Wyjątki</td>
+            <td>
+              <code>BirException</code>,
+              <code>BirAuthenticationException</code> i
+              <code>BirNotFoundException</code>.
+            </td>
+            <td>
+              Dodać bezpieczne podtypy transportu/protokołu oraz
+              <code>BirAmbiguousResultException</code> i
+              <code>BirRateLimitException</code>.
+            </td>
+          </tr>
+          <tr>
+            <td>Rozszerzanie</td>
+            <td><code>BirClientInterface</code>.</td>
+            <td>
+              Usunąć <code>GusApiFactoryInterface</code>; udokumentować
+              <code>BirGatewayInterface</code>.
+            </td>
+          </tr>
+          <tr>
+            <td>Konfiguracja</td>
+            <td>Obecne nazwy kluczy produkcji i sandboxa.</td>
+            <td>
+              Dodać timeouty, limit odpowiedzi, bezpieczny user agent i
+              domyślny limiter na współdzielonym cache.
+            </td>
+          </tr>
+          <tr>
+            <td>Composer</td>
+            <td>Spatie Data i wymagane rozszerzenia PHP.</td>
+            <td>
+              Usunąć GusApi; podnieść minimum do PHP 8.4 i Laravel 13 oraz
+              jawnie wymagać rozszerzeń PHP użytych przez klienta.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Przewodnik migracji musi zawierać zamiennik dla niestandardowych factory
+        GusApi, informację o nowych wymaganiach rozszerzeń PHP, różnice w
+        wyjątkach, kolekcjach wyników, pluralnych raportach, nowych enumach i
+        DTO, limiterze oraz opis nowego raportu BIR121.
+      </p>
+      <div class="business-logic-block">
+        Wersja 2.0 nie wspiera PHP 8.3 ani Laravel 12. Aplikacje, które nie mogą
+        przejść na PHP 8.4 i Laravel 13, pozostają na utrzymywanej linii 1.x.
+      </div>
+    </section>
+
+    <section id="etapy" class="level2">
+      <h2>Etapy i tasklista</h2>
+
+      <h3>Etap 0 - zamrożenie kontraktu i dowodów</h3>
+      <ol class="task-list">
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Spisać publiczne API v1.1 objęte kompatybilnością.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Zapisać zanonimizowane fixtures dla wyszukiwania, raportów i błędów.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Dodać testy kontraktu dla obecnego zachowania liczby żądań i retry.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Udokumentować pochodzenie każdej fixture i datę dokumentacji GUS.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Ustalić politykę ponownego użycia oficjalnego WSDL/XSD.
+        </li>
+      </ol>
+
+      <h3>Etap 1 - spike transportowy</h3>
+      <ol class="task-list">
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Zbudować minimalny transport dla <code>Zaloguj</code> i
+          <code>GetValue</code>.
+        </li>
+        <li>
+          <span class="task-status task-status--done"
+            >Status: odstąpiono po wyborze cURL</span
+          >
+          Porównanie trybu WSDL i non-WSDL zastąpiono transportem cURL bez WSDL;
+          zgodność PHP sprawdza osobna macierz CI.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Potwierdzić SOAP 1.2, WS-Addressing, HTTP <code>sid</code> i MTOM.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Zmierzyć zachowanie timeoutów i błędów TLS oraz bezpiecznie ponownie
+          używać resetowanego uchwytu cURL.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Zweryfikować brak sekretów przy
+          <code>zend.exception_ignore_args=0</code>.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Zapisać ADR z wyborem transportu i sposobem obsługi WSDL.
+        </li>
+      </ol>
+
+      <h3>Etap 2 - protokół, modele i decodery</h3>
+      <ol class="task-list">
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Dodać enum operacji, action URI, namespace i endpointów.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Dodać rozłączny model kryteriów, lokalną walidację formatu i opcjonalne
+          sumy kontrolne NIP/REGON.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Zaimplementować decoder odpowiedzi SOAP/MTOM i zagnieżdżonego XML.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Zaimplementować decoder wyszukiwania oraz mapper do
+          <code>CompanyData</code> z kolekcjami wielosilosowymi, enumami,
+          nullable REGON-14 i ścisłą datą.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Zaimplementować pluralne pełne raporty BIR12/BIR121, jawny błąd
+          niejednoznaczności, surowe plus znormalizowane DTO i raporty zbiorcze
+          BIR11.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Zaimplementować parser jawnych struktur błędów GUS.
+        </li>
+      </ol>
+
+      <h3>Etap 3 - gateway, sesja i bezpieczeństwo</h3>
+      <ol class="task-list">
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Dodać <code>BirGatewayInterface</code> i
+          <code>NativeBirGateway</code>.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Dodać izolowany stan sesji produkcji i sandboxa.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Zaimplementować diagnostykę pustej odpowiedzi przez
+          <code>GetValue</code>.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Ograniczyć odzyskiwanie sesji do jednego retry.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Dodać bezpieczne wyjątki transportu, protokołu i raportu.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Zablokować serializację nowych komponentów i stanów sesji.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Dodać testy canary dla klucza, SID, request body i grafu wyjątków.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Dodać domyślny rozproszony limiter Laravel, ważenie batcha i
+          <code>BirRateLimitException</code> z czasem ponowienia.
+        </li>
+      </ol>
+
+      <h3>Etap 4 - integracja Laravel i odłączenie zależności</h3>
+      <ol class="task-list">
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Przepiąć <code>BirClient</code> na własny gateway.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Zaktualizować bindingi ServiceProvidera dla obu środowisk.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Usunąć mappery i factory zależne od typów GusApi.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Przenieść wartości raportów do własnych enumów i dodać BIR121.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Zastąpić FakeGusApi przez fake gateway/transport.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Usunąć <code>gusapi/gusapi</code> z runtime i dodać jawne rozszerzenia
+          PHP.
+        </li>
+      </ol>
+
+      <h3>Etap 5 - zgodność, dokumentacja i wydanie</h3>
+      <ol class="task-list">
+        <li>
+          <span class="task-status task-status--done"
+            >Status: zastąpione weryfikacją kontraktu</span
+          >
+          Testy różnicowe stary/native zastąpiono zamrożonymi kontraktami,
+          fixtures, przeglądem kompatybilności wobec GusApi 6.3.2 i próbą
+          natywnego klienta na żywym sandboxie.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Rozszerzyć sandbox suite o typy i błędy możliwe do odtworzenia.
+        </li>
+        <li>
+          <span class="task-status task-status--pending"
+            >Status: oczekuje na GitHub Actions</span
+          >
+          Uruchomić pełną macierz CI Laravel 13 i PHP 8.4-8.5.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Zaktualizować README, docs, Laravel Boost skill i przykłady, w tym
+          ostrzeżenia XSS, SQL injection i CSV injection.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Przygotować <code>UPGRADE-2.0</code> i changelog z breaking changes.
+        </li>
+        <li>
+          <span class="task-status task-status--done">Status: wykonane</span>
+          Usunąć tymczasową dev-zależność GusApi i potwierdzić
+          <code>composer why gusapi/gusapi</code> bez wyniku.
+        </li>
+        <li>
+          <span class="task-status task-status--pending"
+            >Status: wymaga zgody maintenera</span
+          >
+          Po zielonym CI wydać <code>v2.0.0</code> i zweryfikować Packagist.
+        </li>
+      </ol>
+    </section>
+
+    <section id="kryteria" class="level2">
+      <h2>Kryteria akceptacji</h2>
+      <ul>
+        <li>
+          <code>composer why gusapi/gusapi</code> nie znajduje zależności
+          runtime ani dev w artefakcie wydania.
+        </li>
+        <li>
+          Facade, buildery i <code>BirClientInterface</code> przechodzą
+          zaktualizowane testy kontraktowe z udokumentowanymi breaking changes.
+        </li>
+        <li>
+          Wszystkie siedem kryteriów wyszukiwania i limit batcha 20 są
+          sprawdzane przed siecią, a sumy kontrolne NIP/REGON można włączyć
+          opcjonalnie.
+        </li>
+        <li>
+          Wyszukiwanie jednego identyfikatora zwraca wszystkie silosy w
+          kolekcji, pluralny raport pobiera wszystkie unikalne zgodne wyniki, a
+          singularny raport zgłasza niejednoznaczność.
+        </li>
+        <li>
+          Typ, silos i status NIP są enumami; REGON-14 pozostaje nullable, a
+          niepoprawna leksykalnie lub kalendarzowo wartość
+          <code>xs:date</code> jest odrzucana. Obsługiwany jest opcjonalny
+          <code>Z</code> albo poprawny offset strefy czasowej.
+        </li>
+        <li>
+          Wszystkie oficjalne rodziny raportów BIR1.2, BIR121 i sześć raportów
+          zbiorczych mają testy decoderów.
+        </li>
+        <li>
+          Pełny raport zachowuje surowe pola, mapuje liczniki do nullable
+          <code>int</code> i udostępnia znormalizowane DTO bez fantomowych
+          obiektów dla pustych albo unknown-only wierszy oraz bez deklarowania
+          ochrony przed XSS, SQL injection, CSV injection lub log forging.
+        </li>
+        <li>
+          Laravel domyślnie współdzieli budżet GUS przez dokładny
+          <code>Illuminate\Cache\Repository</code> i store z pięcioelementowej
+          allowlisty, waży batch według liczby identyfikatorów i stosuje
+          konserwatywny model sekundowy oraz stałe okna minutowe i godzinowe.
+          Pacing poza scope jest ograniczony do 1 sekundy; po pierwszej
+          rezerwacji w wewnętrznym scope pojedyncze <code>acquire()</code> może
+          czekać do 7 sekund, a pełna recovery dłużej. Pozostałe przypadki
+          zgłasza jako <code>BirRateLimitException</code> przed siecią.
+        </li>
+        <li>
+          Sender ponownie używa cache połączenia cURL, ale usuwa body, callbacki
+          i nagłówki SID pomiędzy operacjami.
+        </li>
+        <li>
+          Pusta odpowiedź jest diagnozowana, a sesja odnawiana maksymalnie raz.
+        </li>
+        <li>Produkcja i sandbox nie współdzielą klucza, endpointu ani SID.</li>
+        <li>
+          Test z <code>zend.exception_ignore_args=0</code> nie znajduje sekretu
+          w wiadomości, trace, previous, context ani serializacji.
+        </li>
+        <li>
+          Testy lokalne nie korzystają z sieci, a sandbox jest osobnym
+          workflowem manualnym lub harmonogramowym.
+        </li>
+        <li>
+          <code>vendor/bin/pint --test</code>,
+          <code>composer analyse -- --no-progress</code>,
+          <code>composer test</code>, walidacja i audit przechodzą.
+        </li>
+        <li>
+          CI przechodzi dla Laravel 13 oraz PHP 8.4 i 8.5 z Pest 5, a osobny
+          graf runtime rozwiązuje PHP 8.4.0 oraz komponenty Illuminate 13.0 bez
+          ograniczeń narzędzi deweloperskich.
+        </li>
+        <li>
+          Pakiet zachowuje licencję MIT i nie zawiera skopiowanego kodu LGPL z
+          GusApi.
+        </li>
+        <li>
+          Dokumentacja oraz przewodnik migracji opisują wszystkie usunięte
+          punkty rozszerzeń v1.
+        </li>
+      </ul>
+    </section>
+
+    <section id="ryzyka" class="level2">
+      <h2>Ryzyka i działania osłonowe</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Ryzyko</th>
+            <th>Wpływ</th>
+            <th>Działanie osłonowe</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Różnice libcurl, MIME/MTOM i TLS pomiędzy platformami PHP.</td>
+            <td><span class="label label--danger">Wysoki</span></td>
+            <td>Spike na PHP 8.4-8.5 i fixtures surowych odpowiedzi.</td>
+          </tr>
+          <tr>
+            <td>
+              Sandbox jest pełny, ale nieaktualizowany i częściowo anonimowy.
+            </td>
+            <td><span class="label label--warning">Średni</span></td>
+            <td>
+              Nie opierać poprawności decoderów wyłącznie na jednym rekordzie
+              sandboxa; używać XSD i fixtures wariantów.
+            </td>
+          </tr>
+          <tr>
+            <td>Niejednoznaczność pustej odpowiedzi.</td>
+            <td><span class="label label--danger">Wysoki</span></td>
+            <td>
+              Centralny algorytm diagnostyki i test każdego rozgałęzienia
+              <code>GetValue</code>.
+            </td>
+          </tr>
+          <tr>
+            <td>Ujawnienie klucza, SID lub XML przez warning/backtrace I/O.</td>
+            <td><span class="label label--danger">Wysoki</span></td>
+            <td>
+              Krótka granica <code>NativeCurlExecutor</code> z nagłówkami i XML
+              oznaczonymi <code>#[SensitiveParameter]</code>, reset uchwytu w
+              <code>finally</code>, wrażliwy storage, brak surowej przyczyny
+              oraz test grafu i globalnego handlera.
+            </td>
+          </tr>
+          <tr>
+            <td>Zmiana oficjalnych raportów, np. BIR121.</td>
+            <td><span class="label label--warning">Średni</span></td>
+            <td>
+              Report enum i decodery oddzielone od transportu; okresowy check
+              dokumentacji GUS.
+            </td>
+          </tr>
+          <tr>
+            <td>Przekroczenie limitów przez retry lub batch.</td>
+            <td><span class="label label--warning">Średni</span></td>
+            <td>
+              Konserwatywny limiter przed transportem, koszt batcha według
+              liczby identyfikatorów, jawne scope recovery, jeden retry i jawny
+              czas ponowienia. Nie przedstawiać lokalnego modelu jako dokładnej
+              implementacji nieopublikowanego algorytmu GUS.
+            </td>
+          </tr>
+          <tr>
+            <td>Brak współdzielonego cache albo atomowego locka.</td>
+            <td><span class="label label--danger">Wysoki</span></td>
+            <td>
+              Fail closed przez <code>BirRateLimitException</code>, dokładny
+              <code>Illuminate\Cache\Repository</code>, allowlista pięciu
+              store, lease locka 30 sekund, contention najwyżej 1 sekundę,
+              monitoring cache i jeden współdzielony Redis dla wielu hostów.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Interpretacja tekstów GUS jako HTML, SQL, formuły CSV albo
+              niezabezpieczonego wpisu logu.
+            </td>
+            <td><span class="label label--danger">Wysoki</span></td>
+            <td>
+              Dotyczy także diagnostyki i statusu usługi. Zachować dane
+              źródłowe, lecz wymagać ochrony właściwej dla kontekstu wyjściowego
+              oraz neutralizacji log forging i opisać ją w skillu konsumenta.
+            </td>
+          </tr>
+          <tr>
+            <td>Nieudokumentowane kopiowanie materiału GusApi.</td>
+            <td><span class="label label--danger">Wysoki</span></td>
+            <td>
+              Implementacja wyłącznie ze źródeł GUS i własnych testów; przegląd
+              diffu pod kątem pochodzenia kodu.
+            </td>
+          </tr>
+          <tr>
+            <td>Breaking change dla niestandardowego GusApi factory.</td>
+            <td><span class="label label--warning">Średni</span></td>
+            <td>Wydanie major, przewodnik migracji i neutralny gateway.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="back-link">
+        <a href="../../README.html">Wróć do indeksu planów</a>
+      </p>
+    </section>
+  </body>
+</html>

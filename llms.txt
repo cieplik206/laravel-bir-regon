@@ -1,32 +1,36 @@
 # Laravel BIR REGON
 
-> `cieplik206/laravel-bir-regon` is a Laravel 12 and 13 package for the Polish GUS BIR/REGON SOAP API. It provides fluent facade and dependency-injection workflows for NIP, REGON, and KRS searches, batch lookups, full and bulk reports, service diagnostics, and typed `spatie/laravel-data` results. It requires PHP 8.3 or newer with SOAP and SimpleXML, and its compatibility matrix covers both Laravel releases on PHP 8.3, 8.4, and 8.5.
+> `cieplik206/laravel-bir-regon` version 2 is a Laravel 13 package for the Polish GUS BIR/REGON SOAP API. It provides fluent facade and dependency-injection workflows for NIP, REGON, and KRS searches, batch lookups, all 17 full report types, bulk reports, service diagnostics, explicit session logout, and typed `spatie/laravel-data` results. Searches return collections because one identifier can represent several entity types or silos; full reports expose plural APIs and reject ambiguous singular selection. Version 2 uses a native GUS BIR 1.2 gateway with a bounded, connection-reusing cURL transport for SOAP 1.2 and WS-Addressing plus a Laravel cache limiter enabled by default. It requires PHP 8.4 or newer with cURL, DOM, and libxml; CI uses Pest 5 with `pest-plugin-phpstan` and separately verifies the PHP 8.4.0/Illuminate 13.0 runtime floor. Applications on PHP 8.3 or Laravel 12 must remain on version 1.x.
 
-Keep identifiers as strings to preserve leading zeroes. Use the package enums for report types, use `BirRegon::sandbox()` for the GUS test service, and keep SOAP authentication and session handling inside the package.
+Keep identifiers as strings to preserve leading zeroes. Entity type, silo, and non-empty NIP status are strict enums; REGON-14 and activity-end date can be null. Activity-end dates retain the normalized `xs:date` lexical value, including an optional `Z` or legal `+/-hh:mm` suffix. PKD classification is a forward-compatible nullable string of at most eight characters, not an enum. Natural-person activity kinds are nullable integer counts. Format validation is always enabled while NIP and REGON checksum validation is opt-in. Use `BirRegon::sandbox()` for the GUS test service, and keep SOAP authentication, session handling, and request limiting inside the package. The limiter uses conservative weighted per-second spacing and local fixed minute/hour windows. New acquisitions pace at most one second; after the first reservation in one search/report recovery scope, each internal acquisition may pace up to seven seconds, while minute/hour blockers fail fast. For multiple hosts configure the exact base Laravel cache repository over one shared Redis store; unsupported repositories/stores fail closed. Explicit logout is optional and isolated between production and sandbox.
+
+Full reports retain exact source rows in `reportData` and add a typed `normalized` DTO projection. Empty and unknown-only rows stay raw without creating normalized phantom objects; singleton cardinality is checked first. No mapper sanitizes source text. Treat every public GUS string—including company fields and diagnostics/service-status messages—as untrusted: escape HTML, bind SQL parameters, allowlist links, validate email addresses, prevent CSV/XLSX formula execution, and normalize control characters before logging.
 
 ## Getting Started
 
 - [Online Documentation](https://cieplik206.github.io/laravel-bir-regon/): Rendered guides and API usage documentation.
 - [Installation](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/installation.md): Requirements, Composer installation, Laravel package discovery, configuration publishing, and optional Boost setup.
-- [Configuration](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/configuration.md): Separate production and sandbox credentials, sandbox selection, reusable sessions, and Laravel configuration-cache guidance.
-- [Basic Usage](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/basic-usage.md): Idiomatic facade and dependency-injection examples for single searches and typed results.
+- [Configuration](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/configuration.md): Separate production and sandbox credentials, bounded and connection-reusing cURL settings, the shared-cache request limiter, reusable sessions, and Laravel configuration-cache guidance.
+- [Basic Usage](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/basic-usage.md): Idiomatic facade and dependency-injection examples for collection searches, strict response enums, typed results, and explicit logout.
 
 ## Core Concepts
 
 - [Batch Searches](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/batch-searches.md): Batch methods, identifier formats, the 20-item GUS limit, collection results, and chunking guidance.
-- [Full and Bulk Reports](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/reports.md): Fluent report workflows, every supported report enum, result shapes, and report applicability rules.
-- [Service Status and Diagnostics](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/service-status-and-diagnostics.md): Public availability checks, authenticated data status, and production or sandbox session diagnostics.
+- [Full and Bulk Reports](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/reports.md): Plural and singular report workflows, ambiguity handling, every supported report enum, raw plus normalized DTOs, and report applicability rules.
+- [Request Limits and Retry](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/rate-limits.md): Official quotas, conservative weighted spacing, local fixed windows, scoped pacing, strict cache-store support, `BirRateLimitException`, and queue retry guidance.
+- [Service Status, Diagnostics, and Logout](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/service-status-and-diagnostics.md): Public availability checks, authenticated data status, session diagnostics, and isolated production or sandbox logout.
 
 ## Reference and Integration
 
-- [Data Objects](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/data-objects.md): Typed fields and serialization behavior for company, report, status, and diagnostic responses.
-- [Error Handling](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/error-handling.md): Package exception hierarchy, catch order, wrapped upstream errors, and post-failure diagnostics.
+- [Data Objects](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/data-objects.md): Strict enums, nullable fields, normalized report DTOs, preserved raw rows, untrusted-data handling, and serialization behavior.
+- [Error Handling](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/error-handling.md): Typed package failures, ambiguous results, retry-aware rate-limit failures, safe exception graphs, session recovery, and post-failure diagnostics.
 - [Testing](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/testing.md): Isolated Pest and Testbench tests, static analysis, opt-in live GUS sandbox checks, and consumer fakes.
-- [Extending the Package](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/extending.md): Replacing the public client or GUS API factory while preserving the facade and fluent API.
+- [Extending the Package](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/extending.md): Scoped client, gateway, and SOAP-over-cURL transport extension points that preserve the facade and fluent API.
+- [Upgrade to 2.0](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/UPGRADE-2.0.md): Native-client requirements and migration steps for collection searches, plural reports, strict enums, normalized DTOs, request limiting, removed factories, and changed extension contracts.
 
 ## AI Agent Guidance
 
-- [Laravel Boost Skill](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/resources/boost/skills/bir-regon-development/SKILL.md): Authoritative package-specific instructions for agents implementing searches, reports, diagnostics, testing, or custom clients.
+- [Laravel Boost Skill](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/resources/boost/skills/bir-regon-development/SKILL.md): Authoritative package-specific instructions for agents implementing searches, reports, diagnostics, logout, testing, or custom clients.
 - [Laravel Boost Integration](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/docs/laravel-boost.md): How consuming applications discover, install, and update the optional package skill.
 
 ## Optional

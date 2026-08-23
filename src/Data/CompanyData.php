@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace cieplik206\BirRegon\Data;
 
-use GusApi\SearchReport;
+use cieplik206\BirRegon\Enums\EntityType;
+use cieplik206\BirRegon\Enums\NipStatus;
+use cieplik206\BirRegon\Enums\Silo;
+use cieplik206\BirRegon\Protocol\SearchResult;
 use Spatie\LaravelData\Data;
 
 class CompanyData extends Data
@@ -21,43 +24,34 @@ class CompanyData extends Data
         public ?string $province,
         public ?string $district,
         public ?string $commune,
-        public ?string $type,
-        public ?string $regon14 = null,
-        public ?string $nipStatus = null,
-        public int $silo = 0,
-        public ?string $activityEndDate = null,
-        public ?string $postCity = null,
+        public EntityType $type,
+        public ?string $regon14,
+        public ?NipStatus $nipStatus,
+        public Silo $silo,
+        public ?string $activityEndDate,
+        public ?string $postCity,
     ) {}
 
-    public static function fromGusApiResult(SearchReport $result): self
+    public static function fromSearchResult(SearchResult $result): self
     {
         return new self(
-            regon: $result->getRegon(),
-            nip: self::nullIfEmpty($result->getNip()),
-            name: $result->getName(),
-            city: self::nullIfEmpty($result->getCity()),
-            postalCode: self::nullIfEmpty($result->getZipCode()),
-            street: self::nullIfEmpty($result->getStreet()),
-            buildingNumber: self::nullIfEmpty($result->getPropertyNumber()),
-            apartmentNumber: self::nullIfEmpty($result->getApartmentNumber()),
-            province: self::nullIfEmpty($result->getProvince()),
-            district: self::nullIfEmpty($result->getDistrict()),
-            commune: self::nullIfEmpty($result->getCommunity()),
-            type: self::nullIfEmpty($result->getType()),
-            regon14: self::nullIfEmpty($result->getRegon14()),
-            nipStatus: self::nullIfEmpty($result->getNipStatus()),
-            silo: $result->getSilo(),
-            activityEndDate: self::nullIfEmpty($result->getActivityEndDate()),
-            postCity: self::nullIfEmpty($result->getPostCity()),
+            regon: $result->regon,
+            nip: $result->nip,
+            name: $result->name,
+            city: $result->city,
+            postalCode: $result->postalCode,
+            street: $result->street,
+            buildingNumber: $result->buildingNumber,
+            apartmentNumber: $result->apartmentNumber,
+            province: $result->province,
+            district: $result->district,
+            commune: $result->commune,
+            type: $result->type,
+            regon14: $result->regon14,
+            nipStatus: $result->nipStatus,
+            silo: $result->silo,
+            activityEndDate: $result->activityEndDate,
+            postCity: $result->postCity,
         );
-    }
-
-    private static function nullIfEmpty(?string $value): ?string
-    {
-        if ($value === null || $value === '') {
-            return null;
-        }
-
-        return $value;
     }
 }

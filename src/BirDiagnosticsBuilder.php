@@ -10,6 +10,6 @@ class BirDiagnosticsBuilder extends BirRequestBuilder
 {
     public function get(): DiagnosticsData
     {
-        return $this->client->getDiagnostics();
+        return $this->getClient()->getDiagnostics();
     }
 }

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY fixture SYSTEM "file:///bir-regon-xxe-must-not-be-read">
+]>
+<root>
+  <dane>
+    <Regon>012345678</Regon>
+    <Nazwa>&fixture;</Nazwa>
+  </dane>
+</root>

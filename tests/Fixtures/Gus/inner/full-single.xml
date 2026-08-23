@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <dane>
+    <praw_regon9>012345678</praw_regon9>
+    <praw_nip>0123456789</praw_nip>
+    <praw_statusNip />
+    <praw_nazwa>FIKCYJNA SPÓŁKA TESTOWA</praw_nazwa>
+    <praw_nazwaSkrocona>FST</praw_nazwaSkrocona>
+    <praw_dataPowstania>2020-01-02</praw_dataPowstania>
+    <praw_dataRozpoczeciaDzialalnosci>2020-02-03</praw_dataRozpoczeciaDzialalnosci>
+    <praw_adSiedzKodPocztowy>00-001</praw_adSiedzKodPocztowy>
+    <praw_adSiedzNumerNieruchomosci>1</praw_adSiedzNumerNieruchomosci>
+    <praw_adSiedzNumerLokalu />
+    <praw_adSiedzMiejscowosc_Nazwa>Testowo</praw_adSiedzMiejscowosc_Nazwa>
+    <praw_adSiedzUlica_Nazwa>ul. Przykładowa</praw_adSiedzUlica_Nazwa>
+  </dane>
+</root>

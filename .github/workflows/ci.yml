@@ -22,10 +22,10 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: '8.5'
           coverage: none
@@ -46,6 +46,46 @@ jobs:
       - name: Audit dependencies
         run: composer audit
 
+  runtime_minimum:
+    name: Runtime minimum (Laravel components 13.0, PHP 8.4.0)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+
+      - name: Remove development-only constraints
+        run: >
+          composer remove --dev
+          larastan/larastan
+          laravel/pint
+          orchestra/testbench
+          pestphp/pest
+          pestphp/pest-plugin-laravel
+          pestphp/pest-plugin-phpstan
+          --no-update --no-interaction
+
+      - name: Resolve the minimum runtime platform
+        run: |
+          composer config platform.php 8.4.0
+          composer update \
+            --prefer-lowest --prefer-stable \
+            --with "illuminate/cache:13.0.0" \
+            --with "illuminate/contracts:13.0.0" \
+            --with "illuminate/support:13.0.0" \
+            --prefer-dist --no-interaction --no-progress
+
+      - name: Verify runtime platform requirements
+        run: composer check-platform-reqs --no-dev
+
   tests:
     name: Tests (Laravel ${{ matrix.laravel }}, PHP ${{ matrix.php }}, ${{ matrix.dependencies }})
     runs-on: ubuntu-latest
@@ -54,36 +94,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - laravel: '12'
-            testbench: '^10.0'
-            php: '8.3'
-            dependencies: lowest
-            composer-options: --prefer-lowest --prefer-stable
-          - laravel: '12'
-            testbench: '^10.0'
-            php: '8.3'
-            dependencies: highest
-            composer-options: ''
-          - laravel: '12'
-            testbench: '^10.0'
+          - laravel: '13'
+            testbench: '^11.0'
             php: '8.4'
-            dependencies: highest
-            composer-options: ''
-          - laravel: '12'
-            testbench: '^10.0'
-            php: '8.5'
-            dependencies: highest
-            composer-options: ''
-          - laravel: '13'
-            testbench: '^11.0'
-            php: '8.3'
             dependencies: lowest
             composer-options: --prefer-lowest --prefer-stable
-          - laravel: '13'
-            testbench: '^11.0'
-            php: '8.3'
-            dependencies: highest
-            composer-options: ''
           - laravel: '13'
             testbench: '^11.0'
             php: '8.4'
@@ -97,10 +112,10 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: ${{ matrix.php }}
           coverage: none
@@ -121,6 +136,7 @@ jobs:
     if: always()
     needs:
       - quality
+      - runtime_minimum
       - tests
     runs-on: ubuntu-slim
     timeout-minutes: 2
@@ -129,7 +145,9 @@ jobs:
       - name: Verify all CI jobs passed
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
+          RUNTIME_MINIMUM_RESULT: ${{ needs.runtime_minimum.result }}
           TESTS_RESULT: ${{ needs.tests.result }}
         run: |
           test "$QUALITY_RESULT" = success
+          test "$RUNTIME_MINIMUM_RESULT" = success
           test "$TESTS_RESULT" = success

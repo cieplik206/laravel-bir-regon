@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static BirBulkReportBuilder forDate(DateTimeImmutable $date)
  * @method static BirServiceBuilder service()
  * @method static BirDiagnosticsBuilder diagnostics()
+ * @method static bool logout()
  *
  * @see BirRegonService
  */

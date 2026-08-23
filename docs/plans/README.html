@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=yes"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <title>Indeks planów implementacji</title>
+    <script src="report-document.js"></script>
+    <link rel="stylesheet" href="report-document.css" />
+  </head>
+  <body>
+    <header id="title-block-header">
+      <h1 class="title">Indeks planów implementacji</h1>
+      <p class="subtitle">
+        Plany techniczne projektu Laravel BIR REGON pogrupowane według stopnia
+        realizacji. Status każdego dokumentu odzwierciedla stan kodu, a nie
+        gotowość samego planu.
+      </p>
+      <ul class="document-meta">
+        <li>Ostatnia aktualizacja: 23 sierpnia 2026</li>
+        <li>Łącznie planów: 1</li>
+      </ul>
+    </header>
+
+    <nav id="TOC" role="doc-toc" aria-label="Spis treści">
+      <h2>Spis treści</h2>
+      <ol>
+        <li><a href="#podsumowanie">Podsumowanie</a></li>
+        <li><a href="#not-implemented">Niezaimplementowane</a></li>
+        <li>
+          <a href="#partially-implemented">Częściowo zaimplementowane</a>
+        </li>
+        <li><a href="#implemented">Zaimplementowane</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <section id="podsumowanie" class="level2">
+        <h2>Podsumowanie</h2>
+        <div class="metric-grid" aria-label="Stan planów implementacji">
+          <div class="metric">
+            <strong>1</strong><span>wszystkie plany</span>
+          </div>
+          <div class="metric">
+            <strong>0</strong><span>niezaimplementowane</span>
+          </div>
+          <div class="metric">
+            <strong>1</strong><span>częściowo wdrożone</span>
+          </div>
+          <div class="metric">
+            <strong>0</strong><span>zaimplementowane</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="not-implemented" class="level2">
+        <h2>Niezaimplementowane</h2>
+        <p>Brak planów w tej kategorii.</p>
+      </section>
+
+      <section id="partially-implemented" class="level2">
+        <h2>Częściowo zaimplementowane</h2>
+        <table>
+          <caption>
+            Plany częściowe z lokalną implementacją oczekujące na zdalne CI lub
+            wydanie
+          </caption>
+          <thead>
+            <tr>
+              <th>Plan</th>
+              <th>Domena</th>
+              <th>Status</th>
+              <th>Docelowe wydanie</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <a
+                  href="partially-implemented/gus/native-bir-client-implementation-plan.html"
+                  >Własna implementacja klienta GUS BIR1.2</a
+                >
+              </td>
+              <td>GUS / BIR</td>
+              <td>
+                <span
+                  class="implementation-status implementation-status--partial"
+                  >Zaimplementowano w 95% (36/38 zadań)</span
+                >
+              </td>
+              <td><code>v2.0.0</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="implemented" class="level2">
+        <h2>Zaimplementowane</h2>
+        <p>Brak planów w tej kategorii.</p>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <dane>
+    <ErrorCode>11</ErrorCode>
+    <ErrorMessagePl>PKD nie jest dostępne dla tego fikcyjnego rekordu historycznego.</ErrorMessagePl>
+    <ErrorMessageEn>PKD is unavailable for this historical fixture record.</ErrorMessageEn>
+    <pRegon>012345678</pRegon>
+    <Typ_podmiotu>F</Typ_podmiotu>
+    <Raport>BIR12OsFizycznaPkd</Raport>
+  </dane>
+</root>

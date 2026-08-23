@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <dane>
+    <lokpraw_regon14>01234567800001</lokpraw_regon14>
+    <lokpraw_nip>0123456789</lokpraw_nip>
+    <lokpraw_statusNip>Unieważniony</lokpraw_statusNip>
+    <lokpraw_nazwa>FIKCYJNA JEDNOSTKA LOKALNA</lokpraw_nazwa>
+    <lokpraw_numerWrejestrzeEwidencji>FIXTURE-1</lokpraw_numerWrejestrzeEwidencji>
+    <lokpraw_dataPowstania>2021-03-04</lokpraw_dataPowstania>
+    <lokpraw_dataRozpoczeciaDzialalnosci>2021-04-05</lokpraw_dataRozpoczeciaDzialalnosci>
+    <lokpraw_adSiedzKodPocztowy>00-002</lokpraw_adSiedzKodPocztowy>
+    <lokpraw_adSiedzNumerNieruchomosci>2</lokpraw_adSiedzNumerNieruchomosci>
+    <lokpraw_adSiedzNumerLokalu>4</lokpraw_adSiedzNumerLokalu>
+    <lokpraw_adSiedzMiejscowosc_Nazwa>Testowo</lokpraw_adSiedzMiejscowosc_Nazwa>
+    <lokpraw_adSiedzUlica_Nazwa>ul. Lokalna</lokpraw_adSiedzUlica_Nazwa>
+  </dane>
+</root>

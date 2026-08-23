@@ -20,7 +20,7 @@ class StubBirClient implements BirClientInterface
     /** @var array<int, array<int, mixed>> */
     public array $calls = [];
 
-    /** @param  array<int, CompanyData>  $companies */
+    /** @param  list<CompanyData>  $companies */
     public function __construct(
         private readonly ?CompanyData $company = null,
         private readonly ?FullCompanyReportData $report = null,
@@ -29,27 +29,32 @@ class StubBirClient implements BirClientInterface
         private readonly ?ServiceStatusData $serviceStatus = null,
         private readonly ?DateTimeImmutable $dataStatus = null,
         private readonly ?DiagnosticsData $diagnostics = null,
+        /** @var list<FullCompanyReportData> */
+        private readonly array $reports = [],
     ) {}
 
-    public function searchByNip(string $nip): CompanyData
+    /** @return list<CompanyData> */
+    public function searchByNip(string $nip): array
     {
         $this->calls[] = ['searchByNip', $nip];
 
-        return $this->company ?? throw new RuntimeException('Company not configured.');
+        return $this->configuredCompanies();
     }
 
-    public function searchByRegon(string $regon): CompanyData
+    /** @return list<CompanyData> */
+    public function searchByRegon(string $regon): array
     {
         $this->calls[] = ['searchByRegon', $regon];
 
-        return $this->company ?? throw new RuntimeException('Company not configured.');
+        return $this->configuredCompanies();
     }
 
-    public function searchByKrs(string $krs): CompanyData
+    /** @return list<CompanyData> */
+    public function searchByKrs(string $krs): array
     {
         $this->calls[] = ['searchByKrs', $krs];
 
-        return $this->company ?? throw new RuntimeException('Company not configured.');
+        return $this->configuredCompanies();
     }
 
     public function searchByNips(array $nips): array
@@ -87,6 +92,14 @@ class StubBirClient implements BirClientInterface
         return $this->report ?? throw new RuntimeException('Report not configured.');
     }
 
+    /** @return list<FullCompanyReportData> */
+    public function getFullReports(string $regon, ReportType $reportType): array
+    {
+        $this->calls[] = ['getFullReports', $regon, $reportType];
+
+        return $this->configuredReports();
+    }
+
     public function getFullReportByNip(string $nip, ReportType $reportType): FullCompanyReportData
     {
         $this->calls[] = ['getFullReportByNip', $nip, $reportType];
@@ -94,11 +107,27 @@ class StubBirClient implements BirClientInterface
         return $this->report ?? throw new RuntimeException('Report not configured.');
     }
 
+    /** @return list<FullCompanyReportData> */
+    public function getFullReportsByNip(string $nip, ReportType $reportType): array
+    {
+        $this->calls[] = ['getFullReportsByNip', $nip, $reportType];
+
+        return $this->configuredReports();
+    }
+
     public function getFullReportByKrs(string $krs, ReportType $reportType): FullCompanyReportData
     {
         $this->calls[] = ['getFullReportByKrs', $krs, $reportType];
 
         return $this->report ?? throw new RuntimeException('Report not configured.');
+    }
+
+    /** @return list<FullCompanyReportData> */
+    public function getFullReportsByKrs(string $krs, ReportType $reportType): array
+    {
+        $this->calls[] = ['getFullReportsByKrs', $krs, $reportType];
+
+        return $this->configuredReports();
     }
 
     public function getBulkReport(DateTimeImmutable $date, BulkReportType $reportType): BulkReportData
@@ -129,7 +158,14 @@ class StubBirClient implements BirClientInterface
         return $this->diagnostics ?? throw new RuntimeException('Diagnostics not configured.');
     }
 
-    /** @return array<int, CompanyData> */
+    public function logout(): bool
+    {
+        $this->calls[] = ['logout'];
+
+        return true;
+    }
+
+    /** @return list<CompanyData> */
     private function configuredCompanies(): array
     {
         if ($this->companies !== []) {
@@ -141,5 +177,19 @@ class StubBirClient implements BirClientInterface
         }
 
         throw new RuntimeException('Companies not configured.');
+    }
+
+    /** @return list<FullCompanyReportData> */
+    private function configuredReports(): array
+    {
+        if ($this->reports !== []) {
+            return $this->reports;
+        }
+
+        if ($this->report !== null) {
+            return [$this->report];
+        }
+
+        throw new RuntimeException('Reports not configured.');
     }
 }

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://www.w3.org/2005/08/addressing">
+  <s:Header>
+    <a:Action s:mustUnderstand="1">http://CIS/BIR/PUBL/2014/07/IUslugaBIRzewnPubl/ZalogujResponse</a:Action>
+  </s:Header>
+  <s:Body>
+    <ZalogujResponse xmlns="http://CIS/BIR/PUBL/2014/07">
+      <ZalogujResult />
+    </ZalogujResponse>
+  </s:Body>
+</s:Envelope>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <dane>
+    <ErrorCode>101</ErrorCode>
+    <ErrorMessagePl>Testowy limit równolegle generowanych raportów został osiągnięty.</ErrorMessagePl>
+    <ErrorMessageEn>The fixture limit for concurrently generated reports was reached.</ErrorMessageEn>
+  </dane>
+</root>

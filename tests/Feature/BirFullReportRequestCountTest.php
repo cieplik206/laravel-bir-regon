@@ -4,23 +4,24 @@ declare(strict_types=1);
 
 use cieplik206\BirRegon\BirClient;
 use cieplik206\BirRegon\BirRegonService;
+use cieplik206\BirRegon\Enums\EntityType;
 use cieplik206\BirRegon\Enums\ReportType;
-use cieplik206\BirRegon\Tests\Support\FakeGusApi;
-use cieplik206\BirRegon\Tests\Support\StubGusApiFactory;
-use GusApi\SearchReport;
-use GusApi\Type\Response\SearchResponseCompanyData;
+use cieplik206\BirRegon\Enums\Silo;
+use cieplik206\BirRegon\Protocol\SearchCriteria;
+use cieplik206\BirRegon\Protocol\SearchResult;
+use cieplik206\BirRegon\Tests\Support\FakeBirGateway;
 
 it('fetches a full report with one search request for every identifier type', function (
     string $identifierType,
     string $identifier,
-    string $searchMethod,
+    SearchCriteria $criteria,
 ): void {
-    $searchReport = makeFullReportSearchReport();
-    $api = new FakeGusApi(
-        searchReports: [$searchReport],
+    $searchResult = makeFullReportSearchResult();
+    $gateway = new FakeBirGateway(
+        searchResults: [$searchResult],
         fullReportData: [['praw_regon9' => '610188201']],
     );
-    $client = new BirClient(new StubGusApiFactory($api), 'api-key');
+    $client = new BirClient($gateway);
     $service = new BirRegonService($client);
 
     $builder = match ($identifierType) {
@@ -36,25 +37,35 @@ it('fetches a full report with one search request for every identifier type', fu
 
     expect($result->basicData->regon)->toBe('610188201')
         ->and($result->reportData)->toBe([['praw_regon9' => '610188201']])
-        ->and($api->calls)->toBe([
-            ['login'],
-            [$searchMethod, $identifier],
-            ['getFullReport', $searchReport, ReportType::Organization->value],
+        ->and($gateway->calls)->toEqual([
+            ['search', $criteria],
+            ['fullReport', '610188201', ReportType::Organization],
         ]);
 })->with([
-    'NIP' => ['nip', '7740001454', 'getByNip'],
-    'KRS' => ['krs', '0000028860', 'getByKrs'],
-    'REGON' => ['regon', '610188201', 'getByRegon'],
+    'NIP' => ['nip', '7740001454', SearchCriteria::nip('7740001454')],
+    'KRS' => ['krs', '0000028860', SearchCriteria::krs('0000028860')],
+    'REGON' => ['regon', '610188201', SearchCriteria::regon('610188201')],
 ]);
 
-function makeFullReportSearchReport(): SearchReport
+function makeFullReportSearchResult(): SearchResult
 {
-    $response = new SearchResponseCompanyData;
-    $response->Regon = '610188201';
-    $response->Nip = '7740001454';
-    $response->Nazwa = 'Test Company';
-    $response->Typ = 'P';
-    $response->SilosID = '6';
-
-    return new SearchReport($response);
+    return new SearchResult(
+        regon: '610188201',
+        nip: '7740001454',
+        name: 'Test Company',
+        city: 'Warszawa',
+        postalCode: '00-001',
+        street: 'Testowa',
+        buildingNumber: '1',
+        apartmentNumber: null,
+        province: 'MAZOWIECKIE',
+        district: 'Warszawa',
+        commune: 'Warszawa',
+        type: EntityType::LegalUnit,
+        regon14: null,
+        nipStatus: null,
+        silo: Silo::LegalUnits,
+        activityEndDate: null,
+        postCity: 'Warszawa',
+    );
 }

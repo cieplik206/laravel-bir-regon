@@ -7,6 +7,9 @@
 
 # GUS transport, authentication, sessions, and Laravel integration
 /src/BirClient.php @cieplik206
-/src/GusApiFactory.php @cieplik206
-/src/GusApiFactoryInterface.php @cieplik206
 /src/BirRegonServiceProvider.php @cieplik206
+/src/Contracts/ @cieplik206
+/src/Gateway/ @cieplik206
+/src/Protocol/ @cieplik206
+/src/Transport/ @cieplik206
+/config/bir-regon.php @cieplik206

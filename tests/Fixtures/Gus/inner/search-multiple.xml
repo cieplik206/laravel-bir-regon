@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <dane>
+    <Regon>012345678</Regon>
+    <Nip>0123456789</Nip>
+    <StatusNip />
+    <Nazwa>FIKCYJNA SPÓŁKA TESTOWA</Nazwa>
+    <Wojewodztwo>MAZOWIECKIE</Wojewodztwo>
+    <Powiat>testowy</Powiat>
+    <Gmina>Gmina Testowa</Gmina>
+    <Miejscowosc>Testowo</Miejscowosc>
+    <KodPocztowy>00-001</KodPocztowy>
+    <Ulica>ul. Przykładowa</Ulica>
+    <NrNieruchomosci>1</NrNieruchomosci>
+    <NrLokalu />
+    <Typ>P</Typ>
+    <SilosID>6</SilosID>
+    <MiejscowoscPoczty>Testowo</MiejscowoscPoczty>
+  </dane>
+  <dane>
+    <Regon>987654321</Regon>
+    <Nip>9876543210</Nip>
+    <StatusNip>Uchylony</StatusNip>
+    <Nazwa>FIKCYJNE GOSPODARSTWO TESTOWE</Nazwa>
+    <Wojewodztwo>POMORSKIE</Wojewodztwo>
+    <Powiat>przykładowy</Powiat>
+    <Gmina>Nowa Gmina</Gmina>
+    <Miejscowosc>Przykładowo</Miejscowosc>
+    <KodPocztowy>80-001</KodPocztowy>
+    <Ulica />
+    <NrNieruchomosci>2A</NrNieruchomosci>
+    <NrLokalu>3</NrLokalu>
+    <Typ>F</Typ>
+    <SilosID>2</SilosID>
+    <DataZakonczeniaDzialalnosci>2025-12-31</DataZakonczeniaDzialalnosci>
+    <MiejscowoscPoczty>Przykładowo</MiejscowoscPoczty>
+  </dane>
+</root>

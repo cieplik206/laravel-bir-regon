@@ -4,136 +4,157 @@ declare(strict_types=1);
 
 namespace cieplik206\BirRegon;
 
+use cieplik206\BirRegon\Concerns\PreventsSerialization;
+use cieplik206\BirRegon\Contracts\BirGatewayInterface;
 use cieplik206\BirRegon\Data\BulkReportData;
 use cieplik206\BirRegon\Data\CompanyData;
 use cieplik206\BirRegon\Data\DiagnosticsData;
 use cieplik206\BirRegon\Data\FullCompanyReportData;
 use cieplik206\BirRegon\Data\ServiceStatusData;
 use cieplik206\BirRegon\Enums\BulkReportType;
-use cieplik206\BirRegon\Enums\Environment;
 use cieplik206\BirRegon\Enums\ReportType;
-use cieplik206\BirRegon\Exceptions\BirAuthenticationException;
+use cieplik206\BirRegon\Exceptions\BirAmbiguousResultException;
 use cieplik206\BirRegon\Exceptions\BirException;
 use cieplik206\BirRegon\Exceptions\BirNotFoundException;
+use cieplik206\BirRegon\Exceptions\BirProtocolException;
+use cieplik206\BirRegon\Exceptions\BirValidationException;
+use cieplik206\BirRegon\Protocol\GetValueParameter;
+use cieplik206\BirRegon\Protocol\SearchCriteria;
+use cieplik206\BirRegon\Protocol\SearchResult;
 use DateTimeImmutable;
-use GusApi\Exception\InvalidServerResponseException;
-use GusApi\Exception\InvalidUserKeyException;
-use GusApi\Exception\NotFoundException;
-use GusApi\GusApi;
-use GusApi\SearchReport;
+use DateTimeZone;
+use SensitiveParameterValue;
 use Throwable;
 
 class BirClient implements BirClientInterface
 {
-    private ?GusApi $api = null;
+    use PreventsSerialization;
 
-    private bool $loggedIn = false;
-
-    private string $apiKey;
-
-    private Environment $environment;
+    private readonly SensitiveParameterValue $gateway;
 
     public function __construct(
-        private readonly GusApiFactoryInterface $gusApiFactory,
-        ?string $apiKey = null,
-        ?Environment $environment = null,
+        #[\SensitiveParameter] BirGatewayInterface $gateway,
     ) {
-        $apiKey ??= (string) config('bir-regon.api_key', '');
-        $this->apiKey = $apiKey;
-        $this->environment = $environment ?? Environment::Production;
+        $this->gateway = new SensitiveParameterValue($gateway);
     }
 
-    public function searchByNip(string $nip): CompanyData
+    /** @return list<CompanyData> */
+    public function searchByNip(string $nip): array
     {
-        return $this->searchOne(static fn (GusApi $api) => $api->getByNip($nip), $nip, 'NIP');
+        $this->ensureNotRestoredFromSerialization();
+
+        return $this->searchMany(SearchCriteria::nip($nip), [$nip], 'NIP');
     }
 
-    public function searchByRegon(string $regon): CompanyData
+    /** @return list<CompanyData> */
+    public function searchByRegon(string $regon): array
     {
-        return $this->searchOne(static fn (GusApi $api) => $api->getByRegon($regon), $regon, 'REGON');
+        $this->ensureNotRestoredFromSerialization();
+
+        return $this->searchMany(SearchCriteria::regon($regon), [$regon], 'REGON');
     }
 
-    public function searchByKrs(string $krs): CompanyData
+    /** @return list<CompanyData> */
+    public function searchByKrs(string $krs): array
     {
-        return $this->searchOne(static fn (GusApi $api) => $api->getByKrs($krs), $krs, 'KRS');
+        $this->ensureNotRestoredFromSerialization();
+
+        return $this->searchMany(SearchCriteria::krs($krs), [$krs], 'KRS');
     }
 
-    /**
-     * @param  array<int, string>  $nips
-     * @return array<int, CompanyData>
-     */
     public function searchByNips(array $nips): array
     {
-        return $this->searchMany(
-            static fn (GusApi $api) => $api->getByNips($nips),
-            $nips,
-            'NIP',
-        );
+        $this->ensureNotRestoredFromSerialization();
+
+        return $nips === []
+            ? []
+            : $this->searchMany(SearchCriteria::nips(array_values($nips)), $nips, 'NIP');
     }
 
-    /**
-     * @param  array<int, string>  $krsNumbers
-     * @return array<int, CompanyData>
-     */
     public function searchByKrsNumbers(array $krsNumbers): array
     {
-        return $this->searchMany(
-            static fn (GusApi $api) => $api->getByKrses($krsNumbers),
-            $krsNumbers,
-            'KRS',
-        );
+        $this->ensureNotRestoredFromSerialization();
+
+        return $krsNumbers === []
+            ? []
+            : $this->searchMany(
+                SearchCriteria::krsNumbers(array_values($krsNumbers)),
+                $krsNumbers,
+                'KRS',
+            );
     }
 
-    /**
-     * @param  array<int, string>  $regons
-     * @return array<int, CompanyData>
-     */
     public function searchByRegons9(array $regons): array
     {
-        return $this->searchMany(
-            static fn (GusApi $api) => $api->getByRegons9($regons),
-            $regons,
-            'REGON9',
-        );
+        $this->ensureNotRestoredFromSerialization();
+
+        return $regons === []
+            ? []
+            : $this->searchMany(SearchCriteria::regons9(array_values($regons)), $regons, 'REGON9');
     }
 
-    /**
-     * @param  array<int, string>  $regons
-     * @return array<int, CompanyData>
-     */
     public function searchByRegons14(array $regons): array
     {
-        return $this->searchMany(
-            static fn (GusApi $api) => $api->getByregons14($regons),
-            $regons,
-            'REGON14',
-        );
+        $this->ensureNotRestoredFromSerialization();
+
+        return $regons === []
+            ? []
+            : $this->searchMany(
+                SearchCriteria::regons14(array_values($regons)),
+                $regons,
+                'REGON14',
+            );
     }
 
     public function getFullReportByNip(string $nip, ReportType $reportType): FullCompanyReportData
     {
-        return $this->getFullReportFromSearch(
-            static fn (GusApi $api) => $api->getByNip($nip),
-            $nip,
-            'NIP',
-            $reportType,
-        );
+        $this->ensureNotRestoredFromSerialization();
+
+        return $this->getFullReportFromSearch(SearchCriteria::nip($nip), $nip, 'NIP', $reportType);
+    }
+
+    /** @return list<FullCompanyReportData> */
+    public function getFullReportsByNip(string $nip, ReportType $reportType): array
+    {
+        $this->ensureNotRestoredFromSerialization();
+
+        return $this->getFullReportsFromSearch(SearchCriteria::nip($nip), $nip, 'NIP', $reportType);
     }
 
     public function getFullReportByKrs(string $krs, ReportType $reportType): FullCompanyReportData
     {
-        return $this->getFullReportFromSearch(
-            static fn (GusApi $api) => $api->getByKrs($krs),
-            $krs,
-            'KRS',
-            $reportType,
-        );
+        $this->ensureNotRestoredFromSerialization();
+
+        return $this->getFullReportFromSearch(SearchCriteria::krs($krs), $krs, 'KRS', $reportType);
+    }
+
+    /** @return list<FullCompanyReportData> */
+    public function getFullReportsByKrs(string $krs, ReportType $reportType): array
+    {
+        $this->ensureNotRestoredFromSerialization();
+
+        return $this->getFullReportsFromSearch(SearchCriteria::krs($krs), $krs, 'KRS', $reportType);
     }
 
     public function getFullReport(string $regon, ReportType $reportType): FullCompanyReportData
     {
+        $this->ensureNotRestoredFromSerialization();
+
         return $this->getFullReportFromSearch(
-            static fn (GusApi $api) => $api->getByRegon($regon),
+            SearchCriteria::regon($regon),
+            $regon,
+            'REGON',
+            $reportType,
+        );
+    }
+
+    /** @return list<FullCompanyReportData> */
+    public function getFullReports(string $regon, ReportType $reportType): array
+    {
+        $this->ensureNotRestoredFromSerialization();
+
+        return $this->getFullReportsFromSearch(
+            SearchCriteria::regon($regon),
             $regon,
             'REGON',
             $reportType,
@@ -142,370 +163,281 @@ class BirClient implements BirClientInterface
 
     public function getBulkReport(DateTimeImmutable $date, BulkReportType $reportType): BulkReportData
     {
+        $this->ensureNotRestoredFromSerialization();
+        $date = $this->normalizeBulkReportDate($date);
+
         try {
-            $reportData = $this->executeWithSessionRecovery(
-                static fn (GusApi $api): array => $api->getBulkReport($date, $reportType->value),
-                static fn (array $result): bool => $result === [],
-            );
-
-            return new BulkReportData($date, $reportType, $reportData);
-        } catch (InvalidUserKeyException $exception) {
-            $this->loggedIn = false;
-
-            throw $this->safeAuthenticationException($exception->getCode());
+            return new BulkReportData($date, $reportType, $this->gateway()->bulkReport($date, $reportType));
         } catch (BirException $exception) {
             throw $exception;
-        } catch (Throwable $exception) {
-            $details = $this->safeExceptionDetails($exception);
-
-            throw $this->safeBirException('GUS API error', $details['message'], $details['code']);
+        } catch (Throwable) {
+            throw new BirException('GUS BIR bulk report operation failed.');
         }
     }
 
     public function getServiceStatus(): ServiceStatusData
     {
+        $this->ensureNotRestoredFromSerialization();
+
         try {
-            $api = $this->getUnauthenticatedApi();
+            $gateway = $this->gateway();
+            $rawStatus = $gateway->getValue(GetValueParameter::ServiceStatus);
+
+            if (preg_match('/^[012]$/D', $rawStatus) !== 1) {
+                throw new BirProtocolException('GUS BIR returned an invalid service status.');
+            }
 
             return new ServiceStatusData(
-                status: $api->serviceStatus(),
-                message: $api->serviceMessage(),
+                status: (int) $rawStatus,
+                message: $gateway->getValue(GetValueParameter::ServiceMessage),
             );
-        } catch (InvalidUserKeyException $exception) {
-            $this->loggedIn = false;
-
-            throw $this->safeAuthenticationException($exception->getCode());
         } catch (BirException $exception) {
             throw $exception;
-        } catch (Throwable $exception) {
-            $details = $this->safeExceptionDetails($exception);
-
-            throw $this->safeBirException('GUS API error', $details['message'], $details['code']);
+        } catch (Throwable) {
+            throw new BirException('GUS BIR service status operation failed.');
         }
     }
 
     public function getDataStatus(): DateTimeImmutable
     {
-        try {
-            return $this->executeWithSessionRecovery(
-                static fn (GusApi $api): DateTimeImmutable => $api->dataStatus(),
-            );
-        } catch (InvalidUserKeyException $exception) {
-            $this->loggedIn = false;
+        $this->ensureNotRestoredFromSerialization();
 
-            throw $this->safeAuthenticationException($exception->getCode());
+        try {
+            $rawStatus = $this->gateway()->getValue(GetValueParameter::DataStatus);
+            $timeZone = new DateTimeZone('Europe/Warsaw');
+            $status = DateTimeImmutable::createFromFormat('!d-m-Y', $rawStatus, $timeZone);
+            $errors = DateTimeImmutable::getLastErrors();
+
+            if (
+                $status === false
+                || ($errors !== false && ($errors['warning_count'] !== 0 || $errors['error_count'] !== 0))
+                || $status->format('d-m-Y') !== $rawStatus
+            ) {
+                throw new BirProtocolException('GUS BIR returned an invalid data status.');
+            }
+
+            return $status;
         } catch (BirException $exception) {
             throw $exception;
-        } catch (Throwable $exception) {
-            $details = $this->safeExceptionDetails($exception);
-
-            throw $this->safeBirException('GUS API error', $details['message'], $details['code']);
+        } catch (Throwable) {
+            throw new BirException('GUS BIR data status operation failed.');
         }
     }
 
     public function getDiagnostics(): DiagnosticsData
     {
-        try {
-            return $this->executeWithSessionRecovery(
-                static fn (GusApi $api): DiagnosticsData => new DiagnosticsData(
-                    messageCode: $api->getMessageCode(),
-                    message: $api->getMessage(),
-                    sessionStatus: $api->getSessionStatus(),
-                ),
-            );
-        } catch (InvalidUserKeyException $exception) {
-            $this->loggedIn = false;
+        $this->ensureNotRestoredFromSerialization();
 
-            throw $this->safeAuthenticationException($exception->getCode());
+        try {
+            $snapshot = $this->gateway()->diagnostics();
+
+            if (
+                $snapshot->messageCode < 0
+                || ! in_array($snapshot->sessionStatus, [0, 1], true)
+            ) {
+                throw new BirProtocolException('GUS BIR returned invalid diagnostics.');
+            }
+
+            return new DiagnosticsData(
+                messageCode: $snapshot->messageCode,
+                message: $snapshot->message,
+                sessionStatus: $snapshot->sessionStatus,
+            );
         } catch (BirException $exception) {
             throw $exception;
-        } catch (Throwable $exception) {
-            $details = $this->safeExceptionDetails($exception);
-
-            throw $this->safeBirException('GUS API error', $details['message'], $details['code']);
+        } catch (Throwable) {
+            throw new BirException('GUS BIR diagnostics operation failed.');
         }
     }
 
-    /**
-     * @param  callable(GusApi): array<SearchReport>  $search
-     */
-    private function searchOne(callable $search, string $identifier, string $type): CompanyData
+    public function logout(): bool
     {
-        $reports = $this->searchReports($search, $identifier, $type);
+        $this->ensureNotRestoredFromSerialization();
 
-        return CompanyData::fromGusApiResult($reports[0]);
-    }
-
-    /**
-     * @param  callable(GusApi): array<SearchReport>  $search
-     * @param  array<int, string>  $identifiers
-     * @return array<int, CompanyData>
-     */
-    private function searchMany(callable $search, array $identifiers, string $type): array
-    {
-        if ($identifiers === []) {
-            return [];
-        }
-
-        $reports = $this->searchReports($search, implode(', ', $identifiers), $type);
-
-        return array_map(
-            static fn (SearchReport $report): CompanyData => CompanyData::fromGusApiResult($report),
-            $reports,
-        );
-    }
-
-    /**
-     * @param  callable(GusApi): array<SearchReport>  $search
-     * @return array<SearchReport>
-     */
-    private function searchReports(callable $search, string $identifier, string $type): array
-    {
         try {
-            $reports = $this->executeWithSessionRecovery($search);
+            return $this->gateway()->logout();
+        } catch (BirException $exception) {
+            throw $exception;
+        } catch (Throwable) {
+            throw new BirException('GUS BIR logout operation failed.');
+        }
+    }
+
+    /**
+     * @param  array<int, string>  $identifiers
+     * @return list<CompanyData>
+     */
+    private function searchMany(
+        SearchCriteria $criteria,
+        array $identifiers,
+        string $type,
+    ): array {
+        $reports = $this->searchResults($criteria, implode(', ', $identifiers), $type);
+
+        return array_map(CompanyData::fromSearchResult(...), $reports);
+    }
+
+    /** @return list<SearchResult> */
+    private function searchResults(
+        SearchCriteria $criteria,
+        string $identifier,
+        string $type,
+    ): array {
+        try {
+            $reports = $this->gateway()->search($criteria);
 
             if ($reports === []) {
                 throw new BirNotFoundException($identifier, $type);
             }
 
             return $reports;
-        } catch (NotFoundException) {
-            throw new BirNotFoundException($identifier, $type);
-        } catch (InvalidUserKeyException $exception) {
-            $this->loggedIn = false;
-
-            throw $this->safeAuthenticationException($exception->getCode());
         } catch (BirException $exception) {
             throw $exception;
-        } catch (Throwable $exception) {
-            $details = $this->safeExceptionDetails($exception);
-
-            throw $this->safeBirException('GUS API error', $details['message'], $details['code']);
+        } catch (Throwable) {
+            throw new BirException('GUS BIR search operation failed.');
         }
     }
 
-    /**
-     * @param  callable(GusApi): array<SearchReport>  $search
-     */
     private function getFullReportFromSearch(
-        callable $search,
+        SearchCriteria $criteria,
         string $identifier,
         string $identifierType,
         ReportType $reportType,
     ): FullCompanyReportData {
-        $reports = $this->searchReports($search, $identifier, $identifierType);
-        $report = $reports[0];
+        $compatibleReports = $this->uniqueReportRequests(
+            $this->compatibleReportsFromSearch(
+                $criteria,
+                $identifier,
+                $identifierType,
+                $reportType,
+            ),
+            $reportType,
+        );
 
-        try {
-            $reportData = $this->executeWithSessionRecovery(
-                static fn (GusApi $api): array => $api->getFullReport($report, $reportType->value),
-                static fn (array $result): bool => $result === [],
+        if (count($compatibleReports) > 1) {
+            throw new BirAmbiguousResultException(
+                $identifier,
+                $identifierType,
+                count($compatibleReports),
             );
-
-            return FullCompanyReportData::fromGusApiReport($report, $reportData);
-        } catch (InvalidUserKeyException $exception) {
-            $this->loggedIn = false;
-
-            throw $this->safeAuthenticationException($exception->getCode());
-        } catch (BirException $exception) {
-            throw $exception;
-        } catch (Throwable $exception) {
-            $details = $this->safeExceptionDetails($exception);
-
-            throw $this->safeBirException('GUS API error', $details['message'], $details['code']);
         }
+
+        return $this->fetchFullReport($compatibleReports[0], $reportType);
+    }
+
+    /** @return list<FullCompanyReportData> */
+    private function getFullReportsFromSearch(
+        SearchCriteria $criteria,
+        string $identifier,
+        string $identifierType,
+        ReportType $reportType,
+    ): array {
+        $compatibleReports = $this->uniqueReportRequests(
+            $this->compatibleReportsFromSearch(
+                $criteria,
+                $identifier,
+                $identifierType,
+                $reportType,
+            ),
+            $reportType,
+        );
+
+        $fullReports = [];
+
+        foreach ($compatibleReports as $report) {
+            $fullReports[] = $this->fetchFullReport($report, $reportType);
+        }
+
+        return $fullReports;
     }
 
     /**
-     * @template TResult
-     *
-     * @param  callable(GusApi): TResult  $operation
-     * @param  (callable(TResult): bool)|null  $resultMayIndicateExpiredSession
-     * @return TResult
-     *
-     * Callers must pass static callbacks that do not retain this client. PHP
-     * may preserve callback arguments in exception traces.
+     * @param  non-empty-list<SearchResult>  $reports
+     * @return non-empty-list<SearchResult>
      */
-    private function executeWithSessionRecovery(
-        callable $operation,
-        ?callable $resultMayIndicateExpiredSession = null,
-    ): mixed {
-        $api = $this->getAuthenticatedApi();
+    private function uniqueReportRequests(array $reports, ReportType $reportType): array
+    {
+        $uniqueReports = [];
 
-        try {
-            $result = $operation($api);
+        foreach ($reports as $report) {
+            $reportRegon = $reportType->reportRegon($report);
 
-            if (
-                $resultMayIndicateExpiredSession === null
-                || ! $resultMayIndicateExpiredSession($result)
-                || ! $this->sessionHasExpired($api)
-            ) {
-                return $result;
-            }
-        } catch (InvalidUserKeyException|BirException $exception) {
-            throw $exception;
-        } catch (InvalidServerResponseException $exception) {
-            if (! $this->sessionHasExpired($api)) {
-                throw $exception;
-            }
-        } catch (\InvalidArgumentException $exception) {
-            throw $exception;
-        } catch (Throwable $exception) {
-            if (! $this->sessionHasExpired($api)) {
-                throw $exception;
+            if (! array_key_exists($reportRegon, $uniqueReports)) {
+                $uniqueReports[$reportRegon] = $report;
             }
         }
 
-        $this->resetAuthenticatedApi();
-
-        return $operation($this->getAuthenticatedApi());
+        return array_values($uniqueReports);
     }
 
-    private function sessionHasExpired(GusApi $api): bool
-    {
+    /** @return non-empty-list<SearchResult> */
+    private function compatibleReportsFromSearch(
+        SearchCriteria $criteria,
+        string $identifier,
+        string $identifierType,
+        ReportType $reportType,
+    ): array {
+        $compatibleReports = array_values(array_filter(
+            $this->searchResults($criteria, $identifier, $identifierType),
+            $reportType->supports(...),
+        ));
+
+        if ($compatibleReports === []) {
+            throw new BirValidationException(
+                "Report {$reportType->value} is not compatible with the returned entity type and silo.",
+            );
+        }
+
+        return $compatibleReports;
+    }
+
+    private function fetchFullReport(
+        #[\SensitiveParameter]
+        SearchResult $report,
+        ReportType $reportType,
+    ): FullCompanyReportData {
         try {
-            return ! $api->isLogged();
+            $reportData = $this->gateway()->fullReport(
+                $reportType->reportRegon($report),
+                $reportType,
+            );
+
+            return FullCompanyReportData::fromSearchResult($report, $reportType, $reportData);
+        } catch (BirException $exception) {
+            throw $exception;
         } catch (Throwable) {
-            return false;
+            throw new BirException('GUS BIR full report operation failed.');
         }
     }
 
-    private function resetAuthenticatedApi(): void
+    private function normalizeBulkReportDate(DateTimeImmutable $date): DateTimeImmutable
     {
-        $this->api = null;
-        $this->loggedIn = false;
-    }
+        $timeZone = new DateTimeZone('Europe/Warsaw');
+        $today = new DateTimeImmutable('today', $timeZone);
+        $localizedDate = $date->getTimezone()->getName() === $timeZone->getName()
+            ? $date
+            : $date->setTimezone($timeZone);
+        $reportDate = $localizedDate->format('H:i:s.u') === '00:00:00.000000'
+            ? $localizedDate
+            : new DateTimeImmutable($localizedDate->format('Y-m-d'), $timeZone);
 
-    private function getAuthenticatedApi(): GusApi
-    {
-        $this->ensureLoggedIn();
-
-        return $this->getInitializedApi();
-    }
-
-    private function getUnauthenticatedApi(): GusApi
-    {
-        if ($this->api !== null) {
-            return $this->api;
-        }
-
-        try {
-            $this->api = $this->gusApiFactory->make($this->apiKey, $this->environment);
-        } catch (Throwable $exception) {
-            $details = $this->safeExceptionDetails($exception);
-
-            throw $this->safeBirException(
-                'Failed to connect to GUS API',
-                $details['message'],
-                $details['code'],
+        if ($reportDate >= $today || $reportDate < $today->modify('-7 days')) {
+            throw new BirValidationException(
+                'Bulk report date must be between yesterday and seven days ago.',
             );
         }
 
-        return $this->api;
+        return $reportDate;
     }
 
-    private function getInitializedApi(): GusApi
+    private function gateway(): BirGatewayInterface
     {
-        if ($this->api === null) {
-            throw new BirException('GUS API client is not initialized.');
+        $gateway = $this->gateway->getValue();
+
+        if (! $gateway instanceof BirGatewayInterface) {
+            throw new \LogicException('The BIR gateway is unavailable.');
         }
 
-        return $this->api;
-    }
-
-    private function ensureLoggedIn(): void
-    {
-        if ($this->apiKey === '') {
-            throw new BirAuthenticationException(
-                'BIR API key is not configured. Set BIR_API_KEY in your .env file.',
-            );
-        }
-
-        if ($this->loggedIn && $this->api !== null) {
-            return;
-        }
-
-        try {
-            $api = $this->getUnauthenticatedApi();
-            $api->login();
-            $this->loggedIn = true;
-        } catch (InvalidUserKeyException $exception) {
-            throw $this->safeAuthenticationException($exception->getCode());
-        } catch (BirException $exception) {
-            throw $exception;
-        } catch (Throwable $exception) {
-            $details = $this->safeExceptionDetails($exception);
-
-            throw $this->safeBirException(
-                'Failed to connect to GUS API',
-                $details['message'],
-                $details['code'],
-            );
-        }
-    }
-
-    /**
-     * Extract only safe scalars before constructing the replacement exception.
-     *
-     * @return array{message: string, code: int}
-     */
-    private function safeExceptionDetails(#[\SensitiveParameter] Throwable $exception): array
-    {
-        $message = $exception->getMessage();
-
-        foreach ($this->sensitiveValues() as $sensitiveValue) {
-            $message = str_replace($sensitiveValue, '[REDACTED]', $message);
-        }
-
-        return [
-            'message' => $message,
-            'code' => $exception->getCode(),
-        ];
-    }
-
-    private function safeBirException(string $context, string $message, int $code): BirException
-    {
-        return new BirException(
-            $context.($message === '' ? '.' : ': '.$message),
-            0,
-            $this->safePreviousException($message, $code),
-        );
-    }
-
-    private function safeAuthenticationException(int $code): BirAuthenticationException
-    {
-        return new BirAuthenticationException(
-            'Invalid API key',
-            0,
-            $this->safePreviousException('Invalid API key', $code),
-        );
-    }
-
-    private function safePreviousException(string $message, int $code): BirException
-    {
-        return new BirException(
-            $message === '' ? 'Upstream GUS API error.' : $message,
-            $code,
-        );
-    }
-
-    /** @return list<string> */
-    private function sensitiveValues(): array
-    {
-        $values = $this->apiKey === '' ? [] : [$this->apiKey];
-
-        if ($this->api !== null) {
-            try {
-                $sessionId = $this->api->getSessionId();
-
-                if ($sessionId !== '') {
-                    $values[] = $sessionId;
-                }
-            } catch (Throwable) {
-                // The session ID is unavailable before a successful login.
-            }
-        }
-
-        return array_values(array_unique($values));
+        return $gateway;
     }
 }

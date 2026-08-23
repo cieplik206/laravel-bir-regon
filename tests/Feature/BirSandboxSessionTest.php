@@ -4,41 +4,85 @@ declare(strict_types=1);
 
 use cieplik206\BirRegon\BirClient;
 use cieplik206\BirRegon\BirRegonService;
-use cieplik206\BirRegon\Enums\Environment;
-use cieplik206\BirRegon\Tests\Support\FakeGusApi;
-use cieplik206\BirRegon\Tests\Support\StubBirClient;
-use cieplik206\BirRegon\Tests\Support\StubGusApiFactory;
-use GusApi\SearchReport;
-use GusApi\Type\Response\SearchResponseCompanyData;
+use cieplik206\BirRegon\Gateway\NativeBirGateway;
+use cieplik206\BirRegon\Protocol\BirOperation;
+use cieplik206\BirRegon\Protocol\SearchCriteria;
+use cieplik206\BirRegon\Protocol\TransportResponse;
+use cieplik206\BirRegon\Tests\Support\QueueBirSoapTransport;
 
-it('reuses one authenticated client session across sandbox builders', function (): void {
-    $api = new FakeGusApi(searchReports: [makeSandboxSessionSearchReport()]);
-    $factory = new StubGusApiFactory($api);
-    $sandboxClient = new BirClient($factory, 'sandbox-key', Environment::Sandbox);
-    $service = new BirRegonService(new StubBirClient, $sandboxClient);
+it('reuses the sandbox session without leaking it into the production gateway', function (): void {
+    $productionSession = 'PRODUCTIONSESSION001';
+    $sandboxSession = 'SANDBOXSESSION000001';
+    $searchResult = sandboxSessionSearchResult();
 
-    $firstResult = $service->sandbox()->forNip('1111111111')->get();
-    $secondResult = $service->sandbox()->forNip('2222222222')->get();
+    $productionTransport = (new QueueBirSoapTransport)
+        ->queue(
+            TransportResponse::success($productionSession),
+            TransportResponse::success($searchResult),
+        );
+    $sandboxTransport = (new QueueBirSoapTransport)
+        ->queue(
+            TransportResponse::success($sandboxSession),
+            TransportResponse::success($searchResult),
+            TransportResponse::success($searchResult),
+        );
 
-    expect($firstResult->regon)->toBe('123456789')
-        ->and($secondResult->regon)->toBe('123456789')
-        ->and($factory->calls)->toBe([
-            ['sandbox-key', Environment::Sandbox],
+    $service = new BirRegonService(
+        new BirClient(new NativeBirGateway($productionTransport)),
+        new BirClient(new NativeBirGateway($sandboxTransport)),
+    );
+
+    $firstSandboxResult = $service->sandbox()->forNip('1111111111')->get();
+    $secondSandboxResult = $service->sandbox()->forNip('2222222222')->get();
+    $productionResult = $service->forNip('3333333333')->get();
+
+    expect($firstSandboxResult->sole()->regon)->toBe('012345678')
+        ->and($secondSandboxResult->sole()->regon)->toBe('012345678')
+        ->and($productionResult->sole()->regon)->toBe('012345678')
+        ->and($sandboxTransport->authenticationChecks)->toBe(1)
+        ->and($productionTransport->authenticationChecks)->toBe(1)
+        ->and($sandboxTransport->calls)->toHaveCount(3)
+        ->and($sandboxTransport->calls[0])->toBe([BirOperation::Login, [], null])
+        ->and($sandboxTransport->calls[1])->toEqual([
+            BirOperation::Search,
+            ['criteria' => SearchCriteria::nip('1111111111')],
+            $sandboxSession,
         ])
-        ->and($api->calls)->toBe([
-            ['login'],
-            ['getByNip', '1111111111'],
-            ['getByNip', '2222222222'],
-        ]);
+        ->and($sandboxTransport->calls[2])->toEqual([
+            BirOperation::Search,
+            ['criteria' => SearchCriteria::nip('2222222222')],
+            $sandboxSession,
+        ])
+        ->and($productionTransport->calls)->toEqual([
+            [BirOperation::Login, [], null],
+            [
+                BirOperation::Search,
+                ['criteria' => SearchCriteria::nip('3333333333')],
+                $productionSession,
+            ],
+        ])
+        ->and($sandboxTransport->sessionIds)->toBe([
+            null,
+            $sandboxSession,
+            $sandboxSession,
+            $sandboxSession,
+        ])
+        ->and($productionTransport->sessionIds)->toBe([
+            null,
+            $productionSession,
+            $productionSession,
+        ])
+        ->and($sandboxTransport->sessionIds)->not->toContain($productionSession)
+        ->and($productionTransport->sessionIds)->not->toContain($sandboxSession);
 });
 
-function makeSandboxSessionSearchReport(): SearchReport
+function sandboxSessionSearchResult(): string
 {
-    $response = new SearchResponseCompanyData;
-    $response->Regon = '123456789';
-    $response->Nip = '1111111111';
-    $response->Nazwa = 'Test Company';
-    $response->Typ = 'P';
+    $contents = file_get_contents(__DIR__.'/../Fixtures/Gus/inner/search-single.xml');
 
-    return new SearchReport($response);
+    if (! is_string($contents)) {
+        throw new LogicException('The search response fixture could not be read.');
+    }
+
+    return $contents;
 }

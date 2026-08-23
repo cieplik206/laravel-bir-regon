@@ -10,21 +10,9 @@ installed dependency graph.
 
 ## Runtime dependencies
 
-### gusapi/gusapi
-
-- License: GNU Lesser General Public License v2.1 or later
-  (`LGPL-2.1-or-later`)
-- Source: <https://github.com/johnzuk/GusApi>
-- License text: <https://github.com/johnzuk/GusApi/blob/6.3.2/LICENSE>
-
-Laravel BIR REGON uses `gusapi/gusapi` as a separate Composer dependency and
-does not incorporate its source code. The library may be replaced with a
-compatible version through Composer. Modifications to `gusapi/gusapi` remain
-subject to the LGPL.
-
 ### Laravel components
 
-- Packages: `illuminate/contracts`, `illuminate/support`
+- Packages: `illuminate/cache`, `illuminate/contracts`, `illuminate/support`
 - License: MIT
 - Source: <https://github.com/laravel/framework>
 - License text: <https://github.com/laravel/framework/blob/13.x/LICENSE.md>
@@ -34,6 +22,9 @@ subject to the LGPL.
 - License: MIT
 - Source: <https://github.com/spatie/laravel-data>
 - License text: <https://github.com/spatie/laravel-data/blob/main/LICENSE.md>
+
+The GUS BIR 1.2 SOAP protocol is implemented directly by this package. No
+third-party GUS client source code is included or installed at runtime.
 
 ## Development dependencies
 
@@ -46,6 +37,7 @@ License and are not required when installing the package with
 - `orchestra/testbench`
 - `pestphp/pest`
 - `pestphp/pest-plugin-laravel`
+- `pestphp/pest-plugin-phpstan`
 
 ## No endorsement
 

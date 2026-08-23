@@ -32,15 +32,15 @@ it('searches the GUS sandbox with every identifier variant', function (): void {
     $byKrsNumbers = $sandbox->forKrsNumbers([SANDBOX_KRS])->get();
     $byRegons = $sandbox->forRegons9([SANDBOX_REGON])->get();
 
-    expect($byNip->regon)->toBe(SANDBOX_REGON)
-        ->and($byRegon->nip)->toBe(SANDBOX_NIP)
-        ->and($byKrs->regon)->toBe(SANDBOX_REGON)
+    expect($byNip->sole()->regon)->toBe(SANDBOX_REGON)
+        ->and($byRegon->sole()->nip)->toBe(SANDBOX_NIP)
+        ->and($byKrs->sole()->regon)->toBe(SANDBOX_REGON)
         ->and($byNips)->toHaveCount(1)
-        ->and($byNips->first()?->regon)->toBe(SANDBOX_REGON)
+        ->and($byNips->sole()->regon)->toBe(SANDBOX_REGON)
         ->and($byKrsNumbers)->toHaveCount(1)
-        ->and($byKrsNumbers->first()?->regon)->toBe(SANDBOX_REGON)
+        ->and($byKrsNumbers->sole()->regon)->toBe(SANDBOX_REGON)
         ->and($byRegons)->toHaveCount(1)
-        ->and($byRegons->first()?->regon)->toBe(SANDBOX_REGON);
+        ->and($byRegons->sole()->regon)->toBe(SANDBOX_REGON);
 })->group('sandbox');
 
 it('fetches a full company report from the GUS sandbox', function (): void {

@@ -20,9 +20,13 @@ sandbox values.
 
 ## Supported versions
 
-Security fixes are provided for the latest release in the `1.x` line.
+The `main` branch is the development line for the next `2.x` release. Security
+fixes are provided for that development line and, after publication, for the
+latest `2.x` release. The legacy `1.x` line is not maintained; this policy does
+not promise security fixes for `1.x` while version 2 is being prepared.
 
 | Version | Supported |
 | --- | --- |
-| 1.x | Yes |
+| 2.x (current `main`; next release) | Yes |
+| 1.x | No |
 | < 1.0 | No |
