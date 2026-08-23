@@ -242,10 +242,11 @@
           transportu i nie są zachowywane jako <code>previous</code>.
         </li>
         <li>
-          Parser odrzuca DOCTYPE, encje zewnętrzne, SOAP Fault, nierozwiązane
-          XOP, brak lub niezgodność akcji WS-Addressing, <code>xsi:nil</code>
-          sprzeczne z WSDL, niejednoznaczne części MIME i payload
-          przekraczający limit.
+          Parser odrzuca DOCTYPE, encje zewnętrzne, nieprawidłowy SOAP Fault,
+          nierozwiązane XOP, brak lub niezgodność akcji WS-Addressing,
+          <code>xsi:nil</code> sprzeczne z WSDL, niejednoznaczne części MIME i
+          payload przekraczający limit. Poprawny SOAP Fault zachowuje wyłącznie
+          standardowy kod enuma; Reason i Detail są odrzucane.
         </li>
         <li>
           Transport, builder koperty, gateway i stan sesji odrzucają użycie po

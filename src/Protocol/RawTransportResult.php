@@ -13,21 +13,41 @@ final class RawTransportResult
     use PreventsSerialization;
 
     private function __construct(
+        public readonly bool $exchangeCompleted,
         public readonly bool $successful,
         private readonly ?SensitiveParameterValue $responseBody,
         public readonly ?string $contentType,
+        public readonly ?int $httpStatus,
     ) {}
 
     public static function success(
         #[\SensitiveParameter] string $body,
         ?string $contentType = null,
     ): self {
-        return new self(true, new SensitiveParameterValue($body), $contentType);
+        return self::completed($body, $contentType, 200);
+    }
+
+    public static function completed(
+        #[\SensitiveParameter] string $body,
+        ?string $contentType,
+        int $httpStatus,
+    ): self {
+        if ($httpStatus < 100 || $httpStatus > 599) {
+            return self::failure();
+        }
+
+        return new self(
+            true,
+            $httpStatus === 200 && is_string($contentType) && $contentType !== '',
+            new SensitiveParameterValue($body),
+            $contentType,
+            $httpStatus,
+        );
     }
 
     public static function failure(): self
     {
-        return new self(false, null, null);
+        return new self(false, false, null, null, null);
     }
 
     public function body(): ?string
@@ -45,6 +65,8 @@ final class RawTransportResult
             return [
                 'body' => '[UNAVAILABLE]',
                 'contentType' => '[UNAVAILABLE]',
+                'exchangeCompleted' => '[UNAVAILABLE]',
+                'httpStatus' => '[UNAVAILABLE]',
                 'successful' => '[UNAVAILABLE]',
             ];
         }
@@ -52,6 +74,8 @@ final class RawTransportResult
         return [
             'body' => $this->responseBody === null ? '[NONE]' : '[REDACTED]',
             'contentType' => $this->contentType ?? '[NONE]',
+            'exchangeCompleted' => $this->exchangeCompleted ? 'yes' : 'no',
+            'httpStatus' => $this->httpStatus === null ? '[NONE]' : (string) $this->httpStatus,
             'successful' => $this->successful ? 'yes' : 'no',
         ];
     }

@@ -718,7 +718,9 @@ BirClientInterface -&gt; BirClient
           poprawne WS-Addressing dla zwykłych operacji i <code>GetValue</code>;
         </li>
         <li>
-          poprawny odbiór <code>multipart/related; application/xop+xml</code>;
+          poprawny odbiór <code>multipart/related; application/xop+xml</code>
+          oraz bezpośredniego <code>application/xop+xml</code> deklarującego
+          <code>application/soap+xml</code>;
         </li>
         <li>
           krótka granica I/O przyjmująca nagłówki i XML jako
@@ -726,8 +728,9 @@ BirClientInterface -&gt; BirClient
           globalnego handlera błędów oraz natychmiastowy reset uchwytu;
         </li>
         <li>
-          deadline całej wymiany, limit strumienia, ścisłe HTTP 200,
-          Content-Type i framing;
+          deadline całej wymiany, limit strumienia, ścisłe Content-Type i
+          framing; HTTP 400/500 jest dekodowane wyłącznie jako ograniczony SOAP
+          Fault, a pozostałe odpowiedzi nie-200 są błędami transportu;
         </li>
         <li>brak zależności testów jednostkowych od sieci i zdalnego WSDL;</li>
         <li>

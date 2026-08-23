@@ -142,4 +142,5 @@ return [
 
 Continue with [Configuration](configuration.md).
 
-Upgrading from 1.x? Follow [Upgrade guide for 2.0](../UPGRADE-2.0.md).
+Upgrading from 1.x? Follow the
+[Upgrade guide for 2.0](https://github.com/cieplik206/laravel-bir-regon/blob/main/UPGRADE-2.0.md).

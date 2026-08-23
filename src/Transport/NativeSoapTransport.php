@@ -11,6 +11,7 @@ use cieplik206\BirRegon\Contracts\BirSoapTransportInterface;
 use cieplik206\BirRegon\Enums\Environment;
 use cieplik206\BirRegon\Exceptions\BirRateLimitException;
 use cieplik206\BirRegon\Protocol\BirOperation;
+use cieplik206\BirRegon\Protocol\RawTransportResult;
 use cieplik206\BirRegon\Protocol\SoapEnvelopeBuilder;
 use cieplik206\BirRegon\Protocol\SoapResponseDecoder;
 use cieplik206\BirRegon\Protocol\TransportFailureType;
@@ -82,17 +83,16 @@ final class NativeSoapTransport implements BirRateLimitScopeInterface, BirSoapTr
     public function call(BirOperation $operation, array $parameters = []): TransportResponse
     {
         $this->ensureNotRestoredFromSerialization();
+        $sessionId = $this->sessionId();
+
+        if (
+            $sessionId !== null
+            && preg_match('/^[A-Za-z0-9]{20}$/D', $sessionId) !== 1
+        ) {
+            return TransportResponse::failure(TransportFailureType::Protocol);
+        }
 
         try {
-            $sessionId = $this->sessionId();
-
-            if (
-                $sessionId !== null
-                && preg_match('/^[A-Za-z0-9]{20}$/D', $sessionId) !== 1
-            ) {
-                return TransportResponse::failure(TransportFailureType::Protocol);
-            }
-
             $request = $this->envelopeBuilder->build(
                 $operation,
                 $parameters,
@@ -102,22 +102,26 @@ final class NativeSoapTransport implements BirRateLimitScopeInterface, BirSoapTr
             if ($request === null) {
                 return TransportResponse::failure(TransportFailureType::Protocol);
             }
+        } catch (Throwable) {
+            return TransportResponse::failure(TransportFailureType::Protocol);
+        }
 
+        try {
             $this->requestLimiter()->acquire($operation, $parameters);
-            $rawResponse = $this->httpSender()->send($operation, $request, $sessionId);
-            $body = $rawResponse->body();
-
-            if (! $rawResponse->successful || $body === null) {
-                return TransportResponse::failure(TransportFailureType::Transport);
-            }
-
-            return $this->responseDecoder->decode(
-                $body,
-                $operation,
-                $rawResponse->contentType,
-            );
         } catch (BirRateLimitException $exception) {
             throw $exception;
+        } catch (Throwable) {
+            throw BirRateLimitException::limiterUnavailable();
+        }
+
+        try {
+            $rawResponse = $this->httpSender()->send($operation, $request, $sessionId);
+        } catch (Throwable) {
+            return TransportResponse::failure(TransportFailureType::Transport);
+        }
+
+        try {
+            return $this->decodeRawResponse($rawResponse, $operation);
         } catch (Throwable) {
             return TransportResponse::failure(TransportFailureType::Protocol);
         }
@@ -127,10 +131,16 @@ final class NativeSoapTransport implements BirRateLimitScopeInterface, BirSoapTr
     {
         $this->ensureNotRestoredFromSerialization();
 
-        $requestLimiter = $this->requestLimiter();
+        try {
+            $requestLimiter = $this->requestLimiter();
 
-        if ($requestLimiter instanceof BirRateLimitScopeInterface) {
-            $requestLimiter->beginRateLimitScope();
+            if ($requestLimiter instanceof BirRateLimitScopeInterface) {
+                $requestLimiter->beginRateLimitScope();
+            }
+        } catch (BirRateLimitException $exception) {
+            throw $exception;
+        } catch (Throwable) {
+            throw BirRateLimitException::limiterUnavailable();
         }
     }
 
@@ -138,10 +148,16 @@ final class NativeSoapTransport implements BirRateLimitScopeInterface, BirSoapTr
     {
         $this->ensureNotRestoredFromSerialization();
 
-        $requestLimiter = $this->requestLimiter();
+        try {
+            $requestLimiter = $this->requestLimiter();
 
-        if ($requestLimiter instanceof BirRateLimitScopeInterface) {
-            $requestLimiter->endRateLimitScope();
+            if ($requestLimiter instanceof BirRateLimitScopeInterface) {
+                $requestLimiter->endRateLimitScope();
+            }
+        } catch (BirRateLimitException $exception) {
+            throw $exception;
+        } catch (Throwable) {
+            throw BirRateLimitException::limiterUnavailable();
         }
     }
 
@@ -182,5 +198,49 @@ final class NativeSoapTransport implements BirRateLimitScopeInterface, BirSoapTr
         }
 
         return $requestLimiter;
+    }
+
+    private function decodeRawResponse(
+        RawTransportResult $rawResponse,
+        BirOperation $operation,
+    ): TransportResponse {
+        if (! $rawResponse->exchangeCompleted || $rawResponse->httpStatus === null) {
+            return TransportResponse::failure(TransportFailureType::Transport);
+        }
+
+        $body = $rawResponse->body();
+        $contentType = $rawResponse->contentType;
+
+        if ($body === null) {
+            return TransportResponse::failure(TransportFailureType::Transport);
+        }
+
+        if ($rawResponse->httpStatus === 200) {
+            if (! $this->responseDecoder->supportsHttpContentType($contentType)) {
+                return TransportResponse::failure(TransportFailureType::Protocol);
+            }
+
+            return $this->responseDecoder->decode(
+                $body,
+                $operation,
+                $contentType,
+                $rawResponse->httpStatus,
+            );
+        }
+
+        if (
+            ! in_array($rawResponse->httpStatus, [400, 500], true)
+            || $body === ''
+            || ! $this->responseDecoder->supportsHttpContentType($contentType)
+        ) {
+            return TransportResponse::failure(TransportFailureType::Transport);
+        }
+
+        return $this->responseDecoder->decode(
+            $body,
+            $operation,
+            $contentType,
+            $rawResponse->httpStatus,
+        );
     }
 }

@@ -66,6 +66,7 @@ it('keeps a restored transport response tombstone safe to inspect', function ():
         'successful' => '[UNAVAILABLE]',
         'failureType' => '[UNAVAILABLE]',
         'resultWasNil' => '[UNAVAILABLE]',
+        'soapFaultCode' => '[UNAVAILABLE]',
     ])
         ->and(print_r($restored, true))->not->toContain($secret)
         ->toContain('[UNAVAILABLE]');
@@ -85,6 +86,8 @@ it('keeps a restored raw transport tombstone safe to inspect', function (): void
     expect($restored->__debugInfo())->toBe([
         'body' => '[UNAVAILABLE]',
         'contentType' => '[UNAVAILABLE]',
+        'exchangeCompleted' => '[UNAVAILABLE]',
+        'httpStatus' => '[UNAVAILABLE]',
         'successful' => '[UNAVAILABLE]',
     ])
         ->and(print_r($restored, true))->not->toContain($secret)

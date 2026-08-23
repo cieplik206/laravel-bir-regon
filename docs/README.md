@@ -20,7 +20,7 @@ logging. Mapping does not sanitize source text.
 3. [Basic usage](basic-usage.md)
 
 Upgrading an existing integration? Read the
-[2.0 upgrade guide](../UPGRADE-2.0.md).
+[2.0 upgrade guide](https://github.com/cieplik206/laravel-bir-regon/blob/main/UPGRADE-2.0.md).
 
 ## Searching and reports
 

@@ -204,8 +204,6 @@ it('does not retry or renew an active session after an ordinary transport failur
         TransportResponse::success('A1234567890123456789'),
         TransportResponse::success(clientRecoveryFixture('inner/search-single.xml')),
         TransportResponse::failure(TransportFailureType::Transport),
-        TransportResponse::success('1'),
-        TransportResponse::success('0'),
         TransportResponse::success(clientRecoveryFixture('inner/search-single.xml')),
     );
     $client = new BirClient(new NativeBirGateway($transport));
@@ -223,8 +221,6 @@ it('does not retry or renew an active session after an ordinary transport failur
             BirOperation::Login,
             BirOperation::Search,
             BirOperation::Search,
-            BirOperation::GetValue,
-            BirOperation::GetValue,
             BirOperation::Search,
         ])
         ->and($transport->authenticationChecks)->toBe(1);

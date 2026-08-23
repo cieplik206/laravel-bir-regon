@@ -15,6 +15,7 @@ use cieplik206\BirRegon\Exceptions\BirNotFoundException;
 use cieplik206\BirRegon\Exceptions\BirProtocolException;
 use cieplik206\BirRegon\Exceptions\BirRateLimitException;
 use cieplik206\BirRegon\Exceptions\BirReportException;
+use cieplik206\BirRegon\Exceptions\BirSoapFaultException;
 use cieplik206\BirRegon\Exceptions\BirTransportException;
 use cieplik206\BirRegon\Protocol\BirErrorData;
 use cieplik206\BirRegon\Protocol\BirOperation;
@@ -128,11 +129,22 @@ final class NativeBirGateway implements BirGatewayInterface
         }
 
         $regons = [];
+        $expectedRegonLength = match ($reportType) {
+            BulkReportType::NewLegalEntitiesAndNaturalPersons,
+            BulkReportType::UpdatedLegalEntitiesAndNaturalPersons,
+            BulkReportType::DeletedLegalEntitiesAndNaturalPersons => 9,
+            BulkReportType::NewLocalUnits,
+            BulkReportType::UpdatedLocalUnits,
+            BulkReportType::DeletedLocalUnits => 14,
+        };
 
         foreach ($decoded->records as $record) {
             $regon = $record['regon'] ?? $record['Regon'] ?? null;
 
-            if (! is_string($regon) || ! preg_match('/^(?:\d{9}|\d{14})$/D', $regon)) {
+            if (
+                ! is_string($regon)
+                || preg_match('/^\d{'.$expectedRegonLength.'}$/D', $regon) !== 1
+            ) {
                 throw new BirProtocolException('GUS BIR returned an invalid bulk report record.');
             }
 
@@ -285,10 +297,6 @@ final class NativeBirGateway implements BirGatewayInterface
             $response = $this->callTransport($operation, $parameters);
 
             if (! $response->successful) {
-                if ($this->recoverSessionIfExpired($this->diagnoseSession(), $attempt)) {
-                    continue;
-                }
-
                 $this->throwTransportFailure($response);
             }
 
@@ -341,10 +349,6 @@ final class NativeBirGateway implements BirGatewayInterface
             $this->assertScalarResultWasNotNil($response, $operation);
 
             if (! $response->successful) {
-                if ($this->recoverSessionIfExpired($this->diagnoseSession(), $attempt)) {
-                    continue;
-                }
-
                 $this->throwTransportFailure($response);
             }
 
@@ -568,6 +572,10 @@ final class NativeBirGateway implements BirGatewayInterface
 
     private function throwTransportFailure(TransportResponse $response): never
     {
+        if ($response->soapFaultCode !== null) {
+            throw new BirSoapFaultException($response->soapFaultCode);
+        }
+
         if ($response->failureType === TransportFailureType::Transport) {
             throw new BirTransportException('Unable to communicate with the GUS BIR service.');
         }

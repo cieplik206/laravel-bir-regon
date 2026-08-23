@@ -24,6 +24,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   official time-of-day quotas, weighted per-second GCRA, fixed calendar minute
   and hour windows, explicit recovery scopes, bounded pacing, a strict cache
   backend allowlist, and a retry-aware `BirRateLimitException`
+- Add safe typed `SoapFaultCode` and `BirSoapFaultException` reporting without
+  retaining the upstream SOAP Reason, Detail, or response body
 
 ### Changed
 
@@ -53,6 +55,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `ext-curl`, `ext-dom`, and `ext-libxml`
 - Reuse a reset cURL handle within each scoped transport to retain connection,
   DNS, and TLS session caches without retaining request bodies or SID headers
+- Preserve bounded HTTP response bodies and status metadata for completed
+  exchanges, decode SOAP 1.2 Faults carried by HTTP 400/500, and accept
+  top-level XOP only when it explicitly declares SOAP XML
 - Apply the same 10 MB default response limit to the outer SOAP/MIME payload
   and nested report XML, including manually constructed gateway graphs
 - Preserve compatibility with the historical indented single-part MIME framing
@@ -86,6 +91,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   WSDL-non-nillable `GetValue` and logout operations, preserve that protocol
   marker through the native transport, and never misclassify malformed
   diagnostics as an expired session
+- Assemble streamed response chunks in linear time, fail immediately on
+  transport/protocol errors without redundant SID diagnostics, classify custom
+  sender and limiter failures at their actual boundary, and validate bulk
+  REGON length against the selected report family
 
 ### Removed
 

@@ -38,7 +38,9 @@ it('accepts a response body exactly at the configured byte limit', function (): 
 
     $result = $buffer->result();
 
-    expect($result->successful)->toBeTrue()
+    expect($result->exchangeCompleted)->toBeTrue()
+        ->and($result->httpStatus)->toBe(200)
+        ->and($result->successful)->toBeTrue()
         ->and($result->body())->toBe('ABCD')
         ->and($result->contentType)->toBe('application/soap+xml; charset=UTF-8');
 });
@@ -114,7 +116,10 @@ it('rejects ambiguous content length and transfer encoding combinations', functi
     ]],
 ]);
 
-it('rejects a non-success HTTP status', function (string $status): void {
+it('preserves a completed non-success HTTP exchange for safe classification', function (
+    string $status,
+    int $expectedStatus,
+): void {
     $handle = curl_init();
 
     if (! $handle instanceof CurlHandle) {
@@ -128,13 +133,38 @@ it('rejects a non-success HTTP status', function (string $status): void {
     $buffer->writeHeader($handle, "\r\n");
     $buffer->writeBody($handle, 'SOAP');
 
-    expect($buffer->result()->successful)->toBeFalse();
+    $result = $buffer->result();
+
+    expect($result->exchangeCompleted)->toBeTrue()
+        ->and($result->httpStatus)->toBe($expectedStatus)
+        ->and($result->successful)->toBeFalse()
+        ->and($result->body())->toBe('SOAP')
+        ->and($result->contentType)->toBe('application/soap+xml');
 })->with([
-    'informational' => ['HTTP/1.1 101 Switching Protocols'],
-    'redirect' => ['HTTP/1.1 302 Found'],
-    'client error' => ['HTTP/1.1 400 Bad Request'],
-    'server error' => ['HTTP/1.1 500 Internal Server Error'],
+    'informational' => ['HTTP/1.1 101 Switching Protocols', 101],
+    'redirect' => ['HTTP/1.1 302 Found', 302],
+    'client error' => ['HTTP/1.1 400 Bad Request', 400],
+    'server error' => ['HTTP/1.1 500 Internal Server Error', 500],
 ]);
+
+it('assembles a large response from small chunks without changing its contents', function (): void {
+    $chunk = str_repeat('A', 1024);
+    $chunkCount = 2048;
+    $bodyBytes = strlen($chunk) * $chunkCount;
+    [$buffer, $handle] = preparedCurlResponseBuffer($bodyBytes, [
+        'Content-Type: application/soap+xml',
+        'Content-Length: '.$bodyBytes,
+    ]);
+
+    foreach (range(1, $chunkCount) as $_) {
+        expect($buffer->writeBody($handle, $chunk))->toBe(strlen($chunk));
+    }
+
+    $result = $buffer->result();
+
+    expect($result->exchangeCompleted)->toBeTrue()
+        ->and($result->body())->toBe(str_repeat($chunk, $chunkCount));
+});
 
 it('accepts only an identity content encoding', function (string $encoding, bool $successful): void {
     [$buffer, $handle] = preparedCurlResponseBuffer(100, [
@@ -164,7 +194,7 @@ it('requires a non-empty HTTP content type and preserves its value', function (
     $result = $buffer->result();
 
     expect($result->successful)->toBe($successful)
-        ->and($result->contentType)->toBe($successful ? $contentType : null);
+        ->and($result->contentType)->toBe($contentType);
 })->with([
     'missing' => [null, false],
     'empty' => ['', false],

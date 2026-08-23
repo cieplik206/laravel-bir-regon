@@ -321,6 +321,7 @@ use cieplik206\BirRegon\Exceptions\BirNotFoundException;
 use cieplik206\BirRegon\Exceptions\BirProtocolException;
 use cieplik206\BirRegon\Exceptions\BirRateLimitException;
 use cieplik206\BirRegon\Exceptions\BirReportException;
+use cieplik206\BirRegon\Exceptions\BirSoapFaultException;
 use cieplik206\BirRegon\Exceptions\BirTransportException;
 use cieplik206\BirRegon\Exceptions\BirValidationException;
 
@@ -340,6 +341,8 @@ try {
     // GUS rejected a report; inspect $exception->gusCode.
 } catch (BirTransportException $exception) {
     // Network or SOAP transport failed safely.
+} catch (BirSoapFaultException $exception) {
+    // GUS returned a typed SOAP Fault; inspect $exception->faultCode.
 } catch (BirProtocolException $exception) {
     // GUS returned an unexpected or malformed response.
 } catch (BirException $exception) {
@@ -353,6 +356,9 @@ the returned exception graph. Read `BirReportException::$gusCode` for a
 rejected report. Use `BirValidationException`, `BirTransportException`, and
 `BirProtocolException` when retry policy needs to distinguish local input,
 connectivity, and malformed responses.
+`BirSoapFaultException` extends `BirProtocolException` and retains only a safe
+`SoapFaultCode` enum; the remote Reason, Detail, and raw response body are not
+kept.
 
 Never catch every `BirException` only to release a queued job for one fixed
 delay. Release using `BirRateLimitException::retryAfterSeconds()` only for the

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use cieplik206\BirRegon\Enums\SoapFaultCode;
 use cieplik206\BirRegon\Protocol\BirOperation;
 use cieplik206\BirRegon\Protocol\SoapResponseDecoder;
 use cieplik206\BirRegon\Protocol\TransportFailureType;
@@ -491,11 +492,26 @@ it('rejects a SOAP fault without exposing its detail as a result', function (): 
     $response = (new SoapResponseDecoder)->decode(
         soapFixture('soap/fault.xml'),
         BirOperation::Login,
+        'application/soap+xml',
+        500,
     );
 
     expect($response->successful)->toBeFalse()
         ->and($response->failureType)->toBe(TransportFailureType::Protocol)
+        ->and($response->soapFaultCode)->toBe(SoapFaultCode::Receiver)
         ->and($response->result())->toBeNull();
+});
+
+it('accepts top-level XOP when it explicitly declares a SOAP media type', function (): void {
+    $response = (new SoapResponseDecoder)->decode(
+        soapFixture('soap/login-success.xml'),
+        BirOperation::Login,
+        'application/xop+xml; charset=UTF-8; type="application/soap+xml"',
+        200,
+    );
+
+    expect($response->successful)->toBeTrue()
+        ->and($response->result())->toBe('fixture-session-0001');
 });
 
 it('rejects a response with a missing result element', function (): void {

@@ -128,6 +128,15 @@ transport must coordinate the GUS quota itself. It should propagate
 `BirRateLimitException` without converting it to a generic transport failure.
 See [Request limits](rate-limits.md).
 
+The native transport classifies failures at the boundary that produced them.
+An exception from a custom HTTP sender becomes a transport failure, while an
+unexpected exception from a custom limiter becomes
+`BirRateLimitException::limiterUnavailable()`. Envelope or response-decoding
+failures remain protocol failures. Completed HTTP 400 and 500 exchanges are
+decoded only when they carry a supported SOAP media type; a valid SOAP 1.2
+Fault is preserved as a safe typed fault code without retaining its raw
+`Reason`, `Detail`, or response body.
+
 A decoded transport result is private and is available only through
 `TransportResponse::result()`. Its debug representation is redacted. A
 serialized response restores only as an inert tombstone and `result()` then
@@ -219,4 +228,5 @@ $sameResults = BirRegon::forNip($nip)->get();
 
 Choose dependency injection for explicit domain dependencies and the facade
 for concise Laravel integration code. Applications upgrading a custom 1.x
-factory or client should also read [Upgrade guide for 2.0](../UPGRADE-2.0.md).
+factory or client should also read the
+[Upgrade guide for 2.0](https://github.com/cieplik206/laravel-bir-regon/blob/main/UPGRADE-2.0.md).

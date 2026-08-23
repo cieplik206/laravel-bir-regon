@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use cieplik206\BirRegon\Enums\Environment;
+use cieplik206\BirRegon\Enums\SoapFaultCode;
 use cieplik206\BirRegon\Protocol\BirOperation;
 use cieplik206\BirRegon\Protocol\RawTransportResult;
+use cieplik206\BirRegon\Protocol\TransportFailureType;
 use cieplik206\BirRegon\Transport\BirHttpSenderInterface;
 use cieplik206\BirRegon\Transport\NativeSoapTransport;
 
@@ -86,3 +88,136 @@ it('decodes a MIME SOAP body using the multipart HTTP content type returned by t
     expect($response->successful)->toBeTrue()
         ->and($response->result())->toBe('fixture-session-0001');
 });
+
+it('decodes top-level XOP SOAP using its declared SOAP media type', function (): void {
+    $body = nativeTransportHttpFixture('soap/login-success.xml');
+    $response = (new NativeSoapTransport(
+        apiKey: 'APIKEYSENTINEL123456',
+        environment: Environment::Sandbox,
+        httpSender: new NativeTransportCompletedExchangeSender(
+            $body,
+            'application/xop+xml; charset=UTF-8; type="application/soap+xml"',
+            200,
+        ),
+    ))->call(BirOperation::Login);
+
+    expect($response->successful)->toBeTrue()
+        ->and($response->result())->toBe('fixture-session-0001');
+});
+
+it('preserves a typed SOAP fault returned with its standard HTTP status', function (
+    int $httpStatus,
+    SoapFaultCode $faultCode,
+): void {
+    $body = nativeTransportHttpFixture('soap/fault.xml');
+
+    if ($faultCode === SoapFaultCode::Sender) {
+        $body = str_replace('s:Receiver', 's:Sender', $body);
+    }
+
+    $response = (new NativeSoapTransport(
+        apiKey: 'APIKEYSENTINEL123456',
+        environment: Environment::Sandbox,
+        httpSender: new NativeTransportCompletedExchangeSender(
+            $body,
+            'application/soap+xml; charset=UTF-8',
+            $httpStatus,
+        ),
+    ))->call(BirOperation::Login);
+
+    expect($response->successful)->toBeFalse()
+        ->and($response->failureType)->toBe(TransportFailureType::Protocol)
+        ->and($response->soapFaultCode)->toBe($faultCode)
+        ->and($response->result())->toBeNull();
+})->with([
+    'Sender over HTTP 400' => [400, SoapFaultCode::Sender],
+    'Receiver over HTTP 500' => [500, SoapFaultCode::Receiver],
+]);
+
+it('classifies completed HTTP failures without a SOAP fault as transport failures', function (
+    int $httpStatus,
+    string $contentType,
+    string $body,
+): void {
+    $response = (new NativeSoapTransport(
+        apiKey: 'APIKEYSENTINEL123456',
+        environment: Environment::Sandbox,
+        httpSender: new NativeTransportCompletedExchangeSender(
+            $body,
+            $contentType,
+            $httpStatus,
+        ),
+    ))->call(BirOperation::Login);
+
+    expect($response->successful)->toBeFalse()
+        ->and($response->failureType)->toBe(TransportFailureType::Transport)
+        ->and($response->soapFaultCode)->toBeNull();
+})->with([
+    'HTTP 500 HTML' => [500, 'text/html; charset=UTF-8', '<html>failure</html>'],
+    'HTTP 500 empty SOAP body' => [500, 'application/soap+xml', ''],
+    'HTTP 401 without SOAP' => [401, 'text/plain', 'Unauthorized'],
+]);
+
+it('classifies malformed SOAP on a completed HTTP 500 exchange as a protocol failure', function (): void {
+    $response = (new NativeSoapTransport(
+        apiKey: 'APIKEYSENTINEL123456',
+        environment: Environment::Sandbox,
+        httpSender: new NativeTransportCompletedExchangeSender(
+            '<not-soap/>',
+            'application/soap+xml',
+            500,
+        ),
+    ))->call(BirOperation::Login);
+
+    expect($response->successful)->toBeFalse()
+        ->and($response->failureType)->toBe(TransportFailureType::Protocol)
+        ->and($response->soapFaultCode)->toBeNull();
+});
+
+it('rejects a successful SOAP operation carried by HTTP 500', function (): void {
+    $response = (new NativeSoapTransport(
+        apiKey: 'APIKEYSENTINEL123456',
+        environment: Environment::Sandbox,
+        httpSender: new NativeTransportCompletedExchangeSender(
+            nativeTransportHttpFixture('soap/login-success.xml'),
+            'application/soap+xml',
+            500,
+        ),
+    ))->call(BirOperation::Login);
+
+    expect($response->successful)->toBeFalse()
+        ->and($response->failureType)->toBe(TransportFailureType::Protocol)
+        ->and($response->result())->toBeNull();
+});
+
+function nativeTransportHttpFixture(string $relativePath): string
+{
+    $body = file_get_contents(__DIR__.'/../Fixtures/Gus/'.$relativePath);
+
+    if (! is_string($body)) {
+        throw new RuntimeException('Unable to read the HTTP response fixture.');
+    }
+
+    return $body;
+}
+
+final readonly class NativeTransportCompletedExchangeSender implements BirHttpSenderInterface
+{
+    public function __construct(
+        private string $body,
+        private string $contentType,
+        private int $httpStatus,
+    ) {}
+
+    public function send(
+        BirOperation $operation,
+        #[SensitiveParameter] string $soapEnvelope,
+        #[SensitiveParameter] ?string $sessionId,
+    ): RawTransportResult {
+        return RawTransportResult::completed(
+            $this->body,
+            $this->contentType,
+            $this->httpStatus,
+        );
+    }
+}

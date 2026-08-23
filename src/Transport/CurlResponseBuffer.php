@@ -6,14 +6,16 @@ namespace cieplik206\BirRegon\Transport;
 
 use cieplik206\BirRegon\Protocol\RawTransportResult;
 use CurlHandle;
-use SensitiveParameterValue;
 
 /** @internal */
 final class CurlResponseBuffer
 {
     private const MAX_HEADER_BYTES = 65_536;
 
-    private SensitiveParameterValue $body;
+    /** @var list<string> */
+    private array $bodyChunks = [];
+
+    private int $bodyBytes = 0;
 
     /** @var array<string, string> */
     private array $headers = [];
@@ -28,10 +30,7 @@ final class CurlResponseBuffer
 
     private ?int $statusCode = null;
 
-    public function __construct(private readonly int $maxResponseBytes)
-    {
-        $this->body = new SensitiveParameterValue('');
-    }
+    public function __construct(private readonly int $maxResponseBytes) {}
 
     public function writeHeader(CurlHandle $handle, #[\SensitiveParameter] string $line): int
     {
@@ -45,10 +44,8 @@ final class CurlResponseBuffer
             return 0;
         }
 
-        if (preg_match('/\AHTTP\/(?:1\.[01]|2|3)\s+([0-9]{3})(?:\s+[^\r\n]*)?\r?\n\z/D', $line, $matches) === 1) {
-            $body = $this->body->getValue();
-
-            if (is_string($body) && $body !== '') {
+        if (preg_match('/\AHTTP\/(?:1\.[01]|2|3)\s+([1-5][0-9]{2})(?:\s+[^\r\n]*)?\r?\n\z/D', $line, $matches) === 1) {
+            if ($this->bodyBytes !== 0) {
                 $this->invalid = true;
 
                 return 0;
@@ -149,45 +146,38 @@ final class CurlResponseBuffer
     public function writeBody(CurlHandle $handle, #[\SensitiveParameter] string $chunk): int
     {
         unset($handle);
-        $body = $this->body->getValue();
-
-        if (! is_string($body)) {
-            $this->invalid = true;
-
-            return 0;
-        }
-
         $chunkLength = strlen($chunk);
 
-        if ($chunkLength > $this->maxResponseBytes - strlen($body)) {
+        if ($chunkLength > $this->maxResponseBytes - $this->bodyBytes) {
             $this->overflow = true;
 
             return 0;
         }
 
-        $this->body = new SensitiveParameterValue($body.$chunk);
+        $this->bodyChunks[] = $chunk;
+        $this->bodyBytes += $chunkLength;
 
         return $chunkLength;
     }
 
     public function result(): RawTransportResult
     {
-        $body = $this->body->getValue();
         $contentType = $this->headers['content-type'] ?? null;
 
         if (
             $this->invalid
             || $this->overflow
             || ! $this->headersComplete
-            || $this->statusCode !== 200
-            || ! is_string($body)
-            || ! is_string($contentType)
-            || $contentType === ''
+            || $this->statusCode === null
         ) {
             return RawTransportResult::failure();
         }
 
-        return RawTransportResult::success($body, $contentType);
+        return RawTransportResult::completed(
+            implode('', $this->bodyChunks),
+            $contentType,
+            $this->statusCode,
+        );
     }
 
     /** @return array<string, string> */

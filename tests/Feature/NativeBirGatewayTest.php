@@ -6,11 +6,13 @@ use cieplik206\BirRegon\Contracts\BirSoapTransportInterface;
 use cieplik206\BirRegon\Enums\BulkReportType;
 use cieplik206\BirRegon\Enums\Environment;
 use cieplik206\BirRegon\Enums\ReportType;
+use cieplik206\BirRegon\Enums\SoapFaultCode;
 use cieplik206\BirRegon\Exceptions\BirAuthenticationException;
 use cieplik206\BirRegon\Exceptions\BirNotFoundException;
 use cieplik206\BirRegon\Exceptions\BirProtocolException;
 use cieplik206\BirRegon\Exceptions\BirRateLimitException;
 use cieplik206\BirRegon\Exceptions\BirReportException;
+use cieplik206\BirRegon\Exceptions\BirSoapFaultException;
 use cieplik206\BirRegon\Exceptions\BirTransportException;
 use cieplik206\BirRegon\Gateway\BirSessionState;
 use cieplik206\BirRegon\Gateway\NativeBirGateway;
@@ -701,8 +703,6 @@ it('does not renew an active session after an ordinary transport failure', funct
         ->and(array_column($transport->calls, 0))->toBe([
             BirOperation::Login,
             BirOperation::Search,
-            BirOperation::GetValue,
-            BirOperation::GetValue,
         ]);
 });
 
@@ -720,8 +720,46 @@ it('does not renew an active session after an ordinary protocol failure', functi
         ->and(array_column($transport->calls, 0))->toBe([
             BirOperation::Login,
             BirOperation::Search,
+        ]);
+});
+
+it('does not diagnose the session after a scalar transport failure', function (): void {
+    $transport = (new QueueBirSoapTransport)->queue(
+        TransportResponse::success('A1234567890123456789'),
+        TransportResponse::failure(TransportFailureType::Transport),
+    );
+    $gateway = new NativeBirGateway($transport);
+
+    expect(fn () => $gateway->getValue(GetValueParameter::Message))
+        ->toThrow(BirTransportException::class, 'Unable to communicate with the GUS BIR service.')
+        ->and(array_column($transport->calls, 0))->toBe([
+            BirOperation::Login,
             BirOperation::GetValue,
-            BirOperation::GetValue,
+        ]);
+});
+
+it('exposes a typed SOAP fault without running session diagnostics', function (): void {
+    $transport = (new QueueBirSoapTransport)->queue(
+        TransportResponse::success('A1234567890123456789'),
+        TransportResponse::failure(
+            TransportFailureType::Protocol,
+            soapFaultCode: SoapFaultCode::Sender,
+        ),
+    );
+    $gateway = new NativeBirGateway($transport);
+    $exception = null;
+
+    try {
+        $gateway->search(SearchCriteria::nip('0123456789'));
+    } catch (BirSoapFaultException $caught) {
+        $exception = $caught;
+    }
+
+    expect($exception)->toBeInstanceOf(BirSoapFaultException::class)
+        ->and($exception->faultCode)->toBe(SoapFaultCode::Sender)
+        ->and(array_column($transport->calls, 0))->toBe([
+            BirOperation::Login,
+            BirOperation::Search,
         ]);
 });
 
@@ -1027,6 +1065,47 @@ it('rejects an invalid REGON in a bulk report record', function (): void {
         BirProtocolException::class,
         'GUS BIR returned an invalid bulk report record.',
     );
+});
+
+it('rejects a bulk REGON whose length does not match the report family', function (
+    BulkReportType $reportType,
+    string $regon,
+): void {
+    $transport = (new QueueBirSoapTransport)->queue(
+        TransportResponse::success('A1234567890123456789'),
+        TransportResponse::success('<root><dane><regon>'.$regon.'</regon></dane></root>'),
+    );
+    $gateway = new NativeBirGateway($transport);
+
+    expect(fn () => $gateway->bulkReport(
+        new DateTimeImmutable('2026-08-22'),
+        $reportType,
+    ))->toThrow(
+        BirProtocolException::class,
+        'GUS BIR returned an invalid bulk report record.',
+    );
+})->with([
+    '14 digits in an entity report' => [
+        BulkReportType::NewLegalEntitiesAndNaturalPersons,
+        '01234567800001',
+    ],
+    '9 digits in a local-unit report' => [
+        BulkReportType::NewLocalUnits,
+        '012345678',
+    ],
+]);
+
+it('accepts a 14-digit REGON in a local-unit bulk report', function (): void {
+    $transport = (new QueueBirSoapTransport)->queue(
+        TransportResponse::success('A1234567890123456789'),
+        TransportResponse::success('<root><dane><regon>01234567800001</regon></dane></root>'),
+    );
+    $gateway = new NativeBirGateway($transport);
+
+    expect($gateway->bulkReport(
+        new DateTimeImmutable('2026-08-22'),
+        BulkReportType::NewLocalUnits,
+    ))->toBe(['01234567800001']);
 });
 
 function nativeGatewayFixture(string $relativePath): string

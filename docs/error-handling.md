@@ -15,6 +15,7 @@ report failures into a package exception hierarchy.
 | `BirRateLimitException` | The local request quota is exhausted or its cache-backed coordination is unavailable |
 | `BirValidationException` | An identifier, batch, date, or report/entity combination is invalid before network access |
 | `BirTransportException` | The package cannot safely complete the HTTPS/SOAP exchange |
+| `BirSoapFaultException` | GUS returns a valid SOAP 1.2 Fault; `faultCode` contains a safe `SoapFaultCode` enum |
 | `BirProtocolException` | GUS returns malformed, ambiguous, or unexpected SOAP/XML data |
 | `BirReportException` | GUS rejects a full or bulk report; `gusCode` contains the numeric result code |
 | `BirException` | A builder is incomplete or another package-level failure occurs |
@@ -80,6 +81,10 @@ SOAP requests, response bodies, the API key, or the session ID. Low-level cURL,
 parser, and protocol failures are not retained as `getPrevious()` causes because
 their messages or traces may contain those values. For a rejected report,
 inspect `BirReportException::$gusCode` instead of parsing its message.
+For a valid SOAP 1.2 Fault, inspect `BirSoapFaultException::$faultCode`; only the
+standard `Sender`, `Receiver`, `MustUnderstand`, `VersionMismatch`, or
+`DataEncodingUnknown` enum is retained. The upstream `Reason` and `Detail` are
+discarded.
 
 ## Request-limit failures
 
@@ -117,17 +122,17 @@ multi-host configuration.
 
 ## Expired sessions
 
-Long-lived workers do not need to renew GUS sessions manually. For an ambiguous
-empty or failed response, the gateway checks both the current session status and
-GUS message code using the same SID. A successful but empty `KomunikatKod` also
-indicates an expired session. An explicit decoded GUS error code `7` is treated
-as authoritative and triggers renewal even if diagnostics momentarily report an
-active session.
+Long-lived workers do not need to renew GUS sessions manually. For an
+ambiguously empty, successfully delivered response, the gateway checks both
+the current session status and GUS message code using the same SID. A
+successful but empty `KomunikatKod` also indicates an expired session. An
+explicit decoded GUS error code `7` is treated as authoritative and triggers
+renewal even if diagnostics momentarily report an active session.
 
 An expired session is cleared, recreated, and the original operation is retried
 at most once. A second expiry clears the replacement SID and raises
-`BirAuthenticationException`. Other failures with complete diagnostics showing
-an active session are not retried as authentication failures.
+`BirAuthenticationException`. A transport or protocol failure is reported
+immediately without issuing additional session-diagnostic requests.
 
 ## Logout failures
 

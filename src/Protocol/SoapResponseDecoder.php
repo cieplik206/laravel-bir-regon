@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace cieplik206\BirRegon\Protocol;
 
+use cieplik206\BirRegon\Enums\SoapFaultCode;
 use DOMDocument;
 use DOMElement;
 use DOMXPath;
@@ -25,6 +26,7 @@ final readonly class SoapResponseDecoder
         #[\SensitiveParameter] string $response,
         BirOperation $operation,
         ?string $httpContentType = null,
+        ?int $httpStatus = null,
     ): TransportResponse {
         try {
             if ($response === '' || strlen($response) > $this->maxResponseBytes) {
@@ -83,7 +85,33 @@ final readonly class SoapResponseDecoder
 
             $faults = $xpath->query('/soap:Envelope/soap:Body/soap:Fault');
 
-            if ($faults === false || $faults->length !== 0) {
+            if ($faults === false || $faults->length > 1) {
+                return TransportResponse::failure(TransportFailureType::Protocol);
+            }
+
+            if ($faults->length === 1) {
+                $fault = $faults->item(0);
+                $faultCode = $fault instanceof DOMElement
+                    ? $this->soapFaultCode($xpath, $fault)
+                    : null;
+
+                if (
+                    $faultCode === null
+                    || (
+                        $httpStatus !== null
+                        && $faultCode->expectedHttpStatus() !== $httpStatus
+                    )
+                ) {
+                    return TransportResponse::failure(TransportFailureType::Protocol);
+                }
+
+                return TransportResponse::failure(
+                    TransportFailureType::Protocol,
+                    soapFaultCode: $faultCode,
+                );
+            }
+
+            if ($httpStatus !== null && $httpStatus !== 200) {
                 return TransportResponse::failure(TransportFailureType::Protocol);
             }
 
@@ -146,6 +174,27 @@ final readonly class SoapResponseDecoder
         }
     }
 
+    public function supportsHttpContentType(?string $httpContentType): bool
+    {
+        if ($httpContentType === null || $httpContentType === '') {
+            return false;
+        }
+
+        $contentType = $this->parseContentType($httpContentType);
+
+        if ($contentType === null) {
+            return false;
+        }
+
+        return match ($contentType['mediaType']) {
+            'application/soap+xml', 'multipart/related' => true,
+            'application/xop+xml' => strtolower(
+                $contentType['parameters']['type'] ?? '',
+            ) === 'application/soap+xml',
+            default => false,
+        };
+    }
+
     private function extractSoapXml(
         #[\SensitiveParameter] string $response,
         ?string $httpContentType,
@@ -158,6 +207,13 @@ final readonly class SoapResponseDecoder
             }
 
             if ($contentType['mediaType'] === 'application/soap+xml') {
+                return $this->plainXmlCandidate($response);
+            }
+
+            if (
+                $contentType['mediaType'] === 'application/xop+xml'
+                && strtolower($contentType['parameters']['type'] ?? '') === 'application/soap+xml'
+            ) {
                 return $this->plainXmlCandidate($response);
             }
 
@@ -767,6 +823,36 @@ final readonly class SoapResponseDecoder
         return $actionNode instanceof DOMElement
             && $this->elementChildren($actionNode) === []
             && trim($actionNode->textContent) === $operation->responseAction();
+    }
+
+    private function soapFaultCode(DOMXPath $xpath, DOMElement $fault): ?SoapFaultCode
+    {
+        $codeNodes = $xpath->query('./soap:Code/soap:Value', $fault);
+
+        if ($codeNodes === false || $codeNodes->length !== 1) {
+            return null;
+        }
+
+        $codeNode = $codeNodes->item(0);
+
+        if (! $codeNode instanceof DOMElement || $this->elementChildren($codeNode) !== []) {
+            return null;
+        }
+
+        $value = trim($codeNode->textContent);
+
+        if (preg_match('/\A(?:(?<prefix>[A-Za-z_][A-Za-z0-9_.-]*):)?(?<name>[A-Za-z_][A-Za-z0-9_.-]*)\z/D', $value, $matches) !== 1) {
+            return null;
+        }
+
+        $prefix = $matches['prefix'];
+        $namespace = $codeNode->lookupNamespaceURI($prefix === '' ? null : $prefix);
+
+        if ($namespace !== self::SOAP_NAMESPACE) {
+            return null;
+        }
+
+        return SoapFaultCode::tryFrom($matches['name']);
     }
 
     private function operationAllowsNilResult(BirOperation $operation): bool

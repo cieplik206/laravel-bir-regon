@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace cieplik206\BirRegon\Protocol;
 
 use cieplik206\BirRegon\Concerns\PreventsSerialization;
+use cieplik206\BirRegon\Enums\SoapFaultCode;
 use SensitiveParameterValue;
 
 final class TransportResponse
@@ -16,20 +17,22 @@ final class TransportResponse
         private readonly ?SensitiveParameterValue $responseResult,
         public readonly ?TransportFailureType $failureType,
         public readonly bool $resultWasNil,
+        public readonly ?SoapFaultCode $soapFaultCode,
     ) {}
 
     public static function success(
         #[\SensitiveParameter] string $result,
         bool $resultWasNil = false,
     ): self {
-        return new self(true, new SensitiveParameterValue($result), null, $resultWasNil);
+        return new self(true, new SensitiveParameterValue($result), null, $resultWasNil, null);
     }
 
     public static function failure(
         TransportFailureType $type,
         bool $resultWasNil = false,
+        ?SoapFaultCode $soapFaultCode = null,
     ): self {
-        return new self(false, null, $type, $resultWasNil);
+        return new self(false, null, $type, $resultWasNil, $soapFaultCode);
     }
 
     public function result(): ?string
@@ -49,6 +52,7 @@ final class TransportResponse
                 'successful' => '[UNAVAILABLE]',
                 'failureType' => '[UNAVAILABLE]',
                 'resultWasNil' => '[UNAVAILABLE]',
+                'soapFaultCode' => '[UNAVAILABLE]',
             ];
         }
 
@@ -57,6 +61,9 @@ final class TransportResponse
             'successful' => $this->successful ? 'yes' : 'no',
             'failureType' => $this->failureType === null ? '[NONE]' : $this->failureType->name,
             'resultWasNil' => $this->resultWasNil ? 'yes' : 'no',
+            'soapFaultCode' => $this->soapFaultCode === null
+                ? '[NONE]'
+                : $this->soapFaultCode->value,
         ];
     }
 }
