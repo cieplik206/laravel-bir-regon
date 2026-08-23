@@ -7,11 +7,18 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-08-23
+
 ### Fixed
 
 - Redact BIR API keys and session IDs from translated GUS exceptions, prevent
   traces from retaining client-bound callbacks, and preserve diagnostic context
   through a credential-free surrogate cause
+
+### Security
+
+- Require protected, signed, CI-verified release tags and publish immutable
+  release assets with SHA-256 checksums
 
 ## [1.1.0] - 2026-08-23
 
@@ -47,7 +54,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Isolated tests and opt-in live GUS sandbox tests
 - A discoverable Laravel Boost skill for AI-assisted integrations
 
-[Unreleased]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.0.0...v1.0.1

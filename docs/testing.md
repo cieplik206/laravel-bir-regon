@@ -55,6 +55,19 @@ Before a release, also validate Composer metadata, code style, static analysis,
 and dependency security advisories. Keep the live GUS sandbox suite separate
 from isolated checks because it depends on an external service.
 
+## Verified release workflow
+
+Create releases only from a commit already merged into `main` with a successful
+`CI Passed` check. Create and push a signed annotated SemVer tag such as
+`v1.2.3`. The protected tag push triggers the `Release` workflow. It verifies
+the tag signature, confirms that the tagged commit is reachable from `main`,
+and checks the GitHub Actions `CI Passed` result before publishing.
+
+The workflow attaches source archives and `SHA256SUMS` to the GitHub Release.
+Repository release immutability freezes the published tag and assets and gives
+the release a GitHub provenance attestation. Tag creation and release
+publication remain deliberate maintainer operations.
+
 ## GUS sandbox tests
 
 The opt-in integration suite sends real requests to the official GUS test

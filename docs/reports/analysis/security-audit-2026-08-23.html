@@ -72,9 +72,14 @@
           aktualizację Composera do 2.10.2 i konfigurację kluczy podpisów. H-03
           zamknięto przez zredagowaną translację wyjątków, bezpieczną przyczynę
           zastępczą oraz testy regresyjne uruchamiane także przy
-          <code>zend.exception_ignore_args=0</code>. Macierz ryzyka poniżej
-          zachowuje pierwotny stan audytowy, a licznik testów uwzględnia
-          remediację.
+          <code>zend.exception_ignore_args=0</code>. Dla H-02 aktywowano
+          bezwyjątkowy ruleset PR/CI/historii dla <code>main</code>, osobny
+          ruleset review dostosowany do jednoosobowego repozytorium, ochronę
+          create/update/delete tagów <code>v*</code> oraz immutable releases.
+          Pliki <code>CODEOWNERS</code> i bezpiecznego workflow wydaniowego
+          domykają kontrolę zmian oraz publikacji.
+          Macierz ryzyka poniżej zachowuje pierwotny stan audytowy, a licznik
+          testów uwzględnia remediację.
         </p>
       </div>
 
@@ -118,10 +123,15 @@
           </tr>
           <tr>
             <td><span class="severity severity--high">P0</span></td>
-            <td>Włączyć rulesety dla <code>main</code> i <code>v*</code>.</td>
             <td>
-              Publiczne API GitHub potwierdza brak ochrony i wymaganych
-              kontroli.
+              <span class="task-status task-status--done">Status: zrobione</span>
+              <del>Włączyć rulesety dla <code>main</code> i <code>v*</code>.</del>
+              Aktywne reguły są potwierdzone przez API; <code>CODEOWNERS</code>
+              i workflow release są częścią chronionego <code>main</code>.
+            </td>
+            <td>
+              Konfiguracja GitHub oraz kontrolowany proces wydawniczy są
+              aktywne.
             </td>
           </tr>
           <tr>
@@ -378,7 +388,7 @@
           <tr>
             <td>Publiczne GitHub API</td>
             <td><code>main protected=false</code>, rulesets <code>[]</code></td>
-            <td>Stan z dnia audytu</td>
+            <td>Stan bazowy przed remediacją</td>
           </tr>
         </tbody>
       </table>
@@ -421,10 +431,13 @@
           </tr>
           <tr>
             <td><a href="#h-02">H-02</a></td>
-            <td><span class="severity severity--high">High</span></td>
             <td>
-              <code>main</code> i wydania nie mają technicznie wymuszonej
+              <span class="severity severity--high">High — bazowe</span>
+            </td>
+            <td>
+              <code>main</code> i wydania nie miały technicznie wymuszonej
               ochrony.
+              <span class="task-status task-status--done">Naprawione</span>
             </td>
             <td>GitHub / release</td>
             <td>Wysoka</td>
@@ -675,12 +688,14 @@
         <div class="finding-header">
           <span class="severity severity--high">High</span>
           <span class="confidence">Pewność wysoka</span>
+          <span class="task-status task-status--done">Status: naprawione</span>
           <h3>
             H-02 — brak technicznie wymuszonej integralności gałęzi i wydań
           </h3>
         </div>
         <p>
-          Publiczne GitHub API zwraca <code>protected: false</code> dla
+          W stanie bazowym publiczne GitHub API zwracało
+          <code>protected: false</code> dla
           <code>main</code>, a endpoint rulesets zwraca pustą listę. Osoba lub
           token z uprawnieniem write może ominąć PR i CI, wykonać force-push
           albo zmienić workflow. Instrukcja „release only after CI passes”
@@ -694,31 +709,55 @@
             >CI dla tego SHA</a
           >
           zakończyło się o <code>00:38:18Z</code>. Tag powstał 31 sekund przed
-          wynikiem testów. Obecne tagi są annotated, lecz niepodpisane; wydania
-          GitHub nie są immutable, a dla <code>v1.0.1</code> i
-          <code>v1.0.2</code> nie ma odpowiadających GitHub Releases.
+          wynikiem testów. Tagi zastane w stanie bazowym były annotated, lecz
+          niepodpisane. W tym stanie GitHub Releases nie były immutable, a dla
+          <code>v1.0.1</code> i <code>v1.0.2</code> nie ma odpowiadających GitHub
+          Releases.
         </p>
+        <div class="callout">
+          <p>
+            <strong>Stan po remediacji 2026-08-23:</strong> aktywny ruleset
+            <code>Protect main history and CI</code> bez bypassu wymaga PR,
+            rozwiązywania rozmów i świeżego checka <code>CI Passed</code> od
+            GitHub Actions oraz blokuje delete i force-push. Osobny ruleset
+            <code>Require main review</code> wymaga jednej akceptacji i
+            akceptacji ostatniego pushu; właściciel ma bypass tylko tego
+            rulesetu review, ponieważ repozytorium nie ma drugiego
+            współpracownika. Nie może tym wyjątkiem ominąć bazowego PR ani CI.
+            Ruleset tagów ogranicza create/update/delete <code>v*</code> do
+            właściciela, a immutable releases są włączone.
+            <code>CODEOWNERS</code> chroni wrażliwe pliki, a workflow release
+            wymusza podpisany tag, pochodzenie z <code>main</code> i pomyślny
+            <code>CI Passed</code> przed publikacją.
+          </p>
+        </div>
         <h4>Naprawa</h4>
         <ul>
           <li>
-            Ruleset <code>main</code>: wymagany PR, co najmniej jedno approval,
-            rozwiązane rozmowy, required status <code>CI Passed</code>, blokada
-            force-push i delete, bez administracyjnego bypassu w zwykłym
-            procesie.
+            <span class="task-status task-status--done">Status: zrobione</span>
+            Rulesety <code>main</code>: bezwyjątkowy PR, rozwiązane rozmowy,
+            required status <code>CI Passed</code> od GitHub Actions oraz blokada
+            force-push/delete; osobny wymóg jednej akceptacji z ograniczonym
+            wyjątkiem review dla jedynego maintenera.
           </li>
           <li>
+            <span class="task-status task-status--done">Status: zrobione</span>
             CODEOWNERS dla <code>.github/workflows/**</code>,
             <code>composer.json</code>, <code>.gitignore</code>, kodu transportu
             i plików release.
           </li>
           <li>
+            <span class="task-status task-status--done">Status: zrobione</span>
             Osobny ruleset <code>v*</code>, który ogranicza create/update/delete
-            tagów do roli lub bota wydawniczego.
+            tagów do właściciela repozytorium.
           </li>
           <li>
-            Release workflow publikuje wyłącznie SHA z chronionego
-            <code>main</code> po wymaganym CI; podpisane tagi, immutable
-            releases, SBOM i provenance/checksum.
+            <span class="task-status task-status--done">Status: zrobione</span>
+            Workflow publikuje wyłącznie podpisany tag SemVer wskazujący commit
+            osiągalny z chronionego <code>main</code> i posiadający pomyślny
+            <code>CI Passed</code>. Tworzy archiwa oraz sumy SHA-256; immutable
+            release zapewnia automatyczną atestację pochodzenia. Eksport SBOM
+            pozostaje dodatkowym wzmocnieniem P3.
           </li>
         </ul>
         <p class="muted">
@@ -1360,9 +1399,12 @@ stringified exception / Monolog: sentinel-present</code></pre>
           <tr>
             <td><span class="severity severity--high">P0 — dziś</span></td>
             <td>
+              <span class="task-status task-status--pending"
+                >Status: prawie zakończone</span
+              >
               Upgrade Composer; rulesety <code>main</code>/<code>v*</code>;
-              tymczasowo nie raportować surowego auth exception; przegląd logów
-              i warunkowa rotacja klucza.
+              bezpieczna translacja auth exception; <code>CODEOWNERS</code> i
+              workflow release; przegląd logów i warunkowa rotacja klucza.
             </td>
             <td>
               Composer ≥2.10.2 bez advisory; publiczne API pokazuje ochronę;

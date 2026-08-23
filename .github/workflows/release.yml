@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  checks: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish verified release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tag, signature, and main ancestry
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Expected a SemVer tag such as v1.2.3." >&2
+            exit 1
+          fi
+
+          ref_json="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG")"
+          if [[ "$(jq -r '.object.type' <<<"$ref_json")" != "tag" ]]; then
+            echo "Release tag must be annotated, not lightweight." >&2
+            exit 1
+          fi
+
+          tag_object_sha="$(jq -r '.object.sha' <<<"$ref_json")"
+          tag_json="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_object_sha")"
+          target_sha="$(jq -r '.object.sha' <<<"$tag_json")"
+
+          if [[ "$(jq -r '.object.type' <<<"$tag_json")" != "commit" ]]; then
+            echo "Release tag must point directly to a commit." >&2
+            exit 1
+          fi
+
+          if [[ "$(jq -r '.verification.verified' <<<"$tag_json")" != "true" ]]; then
+            reason="$(jq -r '.verification.reason' <<<"$tag_json")"
+            echo "Release tag signature is not verified: $reason" >&2
+            exit 1
+          fi
+
+          git fetch --no-tags origin \
+            '+refs/heads/main:refs/remotes/origin/main'
+          if ! git merge-base --is-ancestor "$target_sha" origin/main; then
+            echo "Release tag must point to a commit reachable from main." >&2
+            exit 1
+          fi
+
+          printf 'target_sha=%s\n' "$target_sha" >>"$GITHUB_OUTPUT"
+
+      - name: Require successful CI Passed check
+        env:
+          TARGET_SHA: ${{ steps.tag.outputs.target_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          checks="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/$GITHUB_REPOSITORY/commits/$TARGET_SHA/check-runs?per_page=100")"
+
+          if ! jq -e '
+            [.check_runs[] | select(
+              .name == "CI Passed"
+              and .conclusion == "success"
+              and .app.id == 15368
+            )] | length > 0
+          ' <<<"$checks" >/dev/null; then
+            echo "The tagged commit has no successful CI Passed check from GitHub Actions." >&2
+            exit 1
+          fi
+
+      - name: Build source archives and checksums
+        env:
+          TARGET_SHA: ${{ steps.tag.outputs.target_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          repository_name="${GITHUB_REPOSITORY#*/}"
+          archive_prefix="${repository_name}-${RELEASE_TAG}/"
+          mkdir -p dist
+
+          git archive \
+            --format=tar.gz \
+            --prefix="$archive_prefix" \
+            --output="dist/${repository_name}-${RELEASE_TAG}.tar.gz" \
+            "$TARGET_SHA"
+          git archive \
+            --format=zip \
+            --prefix="$archive_prefix" \
+            --output="dist/${repository_name}-${RELEASE_TAG}.zip" \
+            "$TARGET_SHA"
+
+          cd dist
+          sha256sum ./*.tar.gz ./*.zip >SHA256SUMS
+
+      - name: Publish immutable GitHub release
+        env:
+          TARGET_SHA: ${{ steps.tag.outputs.target_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$TARGET_SHA" \
+            --verify-tag \
+            --generate-notes \
+            --title "$RELEASE_TAG" \
+            --fail-on-no-commits \
+            dist/*
