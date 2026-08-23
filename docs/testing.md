@@ -41,6 +41,20 @@ Validate the Composer package metadata with:
 composer validate --strict
 ```
 
+## Continuous integration
+
+GitHub Actions runs the isolated suite on every push to `main` and on every
+pull request. The test matrix covers:
+
+- PHP 8.3 with the lowest supported dependencies
+- PHP 8.3 with the highest supported dependencies
+- PHP 8.4 with the highest supported dependencies
+- PHP 8.5 with the highest supported dependencies
+
+A separate quality job on PHP 8.5 validates Composer metadata, code style,
+static analysis, and dependency security advisories. The live GUS sandbox
+suite runs separately on a weekly schedule and can also be started manually.
+
 ## GUS sandbox tests
 
 The opt-in integration suite sends real requests to the official GUS test

@@ -11,6 +11,10 @@ Laravel BIR REGON requires:
 - the PHP SOAP extension
 - the PHP SimpleXML extension
 
+The continuous integration matrix tests PHP 8.3, 8.4, and 8.5. PHP 8.3 is
+tested with both the lowest and highest supported dependency versions, while
+PHP 8.4 and 8.5 are tested with the highest supported versions.
+
 Composer verifies the required PHP extensions through the underlying
 `gusapi/gusapi` dependency.
 

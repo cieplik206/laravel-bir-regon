@@ -1,5 +1,7 @@
 # Laravel BIR REGON
 
+[![CI](https://github.com/cieplik206/laravel-bir-regon/actions/workflows/ci.yml/badge.svg)](https://github.com/cieplik206/laravel-bir-regon/actions/workflows/ci.yml)
+
 A fluent Laravel client for the Polish GUS BIR/REGON SOAP API.
 
 Use a Laravel facade or dependency injection to search businesses by NIP,
@@ -32,6 +34,9 @@ $company->toArray();
 - PHP 8.3 or newer
 - Laravel 13
 - PHP SOAP and SimpleXML extensions
+
+The package is continuously tested on PHP 8.3, 8.4, and 8.5. PHP 8.3 is
+verified against both the lowest and highest supported dependency versions.
 
 ## Installation
 
