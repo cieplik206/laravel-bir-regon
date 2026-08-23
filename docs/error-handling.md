@@ -59,8 +59,12 @@ try {
 }
 ```
 
-The original exception is retained as `getPrevious()` when an error is wrapped
-by the package.
+The package preserves useful upstream error messages while redacting the active
+BIR API key and session ID. `getPrevious()` contains a safe `BirException`
+surrogate with the sanitized message and original error code. The raw GUS or
+transport exception is intentionally not retained, because its message or stack
+trace may contain credentials. Application-defined `BirException` instances
+still pass through unchanged.
 
 ## Expired sessions
 

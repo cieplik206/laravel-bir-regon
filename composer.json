@@ -1,8 +1,33 @@
 {
     "name": "cieplik206/laravel-bir-regon",
     "description": "Laravel client for the Polish GUS BIR/REGON API",
+    "keywords": [
+        "api-client",
+        "bir",
+        "gus",
+        "krs",
+        "laravel",
+        "nip",
+        "poland",
+        "regon",
+        "soap"
+    ],
+    "homepage": "https://cieplik206.github.io/laravel-bir-regon/",
     "type": "library",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "Paweł Ciepliński",
+            "homepage": "https://github.com/cieplik206",
+            "role": "Developer"
+        }
+    ],
+    "support": {
+        "docs": "https://cieplik206.github.io/laravel-bir-regon/",
+        "issues": "https://github.com/cieplik206/laravel-bir-regon/issues",
+        "security": "https://github.com/cieplik206/laravel-bir-regon/security/policy",
+        "source": "https://github.com/cieplik206/laravel-bir-regon"
+    },
     "require": {
         "php": "^8.3",
         "gusapi/gusapi": "^6.3",

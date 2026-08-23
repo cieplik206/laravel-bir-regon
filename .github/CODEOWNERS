@@ -1,0 +1,12 @@
+# Security-sensitive package and release surfaces
+/.github/workflows/ @cieplik206
+/composer.json @cieplik206
+/.gitignore @cieplik206
+/CHANGELOG.md @cieplik206
+/SECURITY.md @cieplik206
+
+# GUS transport, authentication, sessions, and Laravel integration
+/src/BirClient.php @cieplik206
+/src/GusApiFactory.php @cieplik206
+/src/GusApiFactoryInterface.php @cieplik206
+/src/BirRegonServiceProvider.php @cieplik206

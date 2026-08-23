@@ -173,9 +173,12 @@ versions from Git tags, so do not add a `version` field to `composer.json`.
 
 A release should be cut only from `main` after CI passes. Move the relevant
 entries out of `Unreleased`, set the release date and comparison links, create
-an annotated `vX.Y.Z` tag, push the tag, publish matching GitHub release notes,
-and verify that Packagist indexes the tag. Release operations always require
-explicit user authorization.
+a signed annotated `vX.Y.Z` tag for the verified commit, and push the tag. The
+protected tag push triggers the `Release` workflow, which rejects lightweight
+or unverified tags, commits outside `main`, and commits without the required
+`CI Passed` check; it publishes immutable release assets and SHA-256 checksums.
+Verify the resulting release and that Packagist indexes the tag. Release
+operations always require explicit user authorization.
 
 ## Security and safe operation
 

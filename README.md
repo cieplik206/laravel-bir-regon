@@ -26,6 +26,7 @@ $company->toArray();
 - All full and bulk report types supported by `gusapi/gusapi`
 - Separate production and sandbox clients with reusable sessions
 - Typed data objects with array and JSON serialization
+- Credential-safe translation of GUS and transport exceptions
 - Laravel auto-discovery, facade, and container bindings
 - Isolated tests plus an opt-in live sandbox suite
 
