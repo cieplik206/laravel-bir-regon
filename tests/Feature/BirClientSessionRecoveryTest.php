@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use cieplik206\BirRegon\BirClient;
+use cieplik206\BirRegon\Enums\BulkReportType;
+use cieplik206\BirRegon\Enums\ReportType;
 use cieplik206\BirRegon\Exceptions\BirException;
 use cieplik206\BirRegon\Tests\Support\StubGusApiFactory;
 use GusApi\GusApi;
@@ -43,6 +45,53 @@ it('renews an expired session for authenticated operations outside the search fl
         ->and($recoveredStatus)->toBe($dataStatus)
         ->and($api->loginCalls)->toBe(2)
         ->and($api->dataStatusCalls)->toBe(3);
+});
+
+it('renews an expired session when a bulk report silently returns empty data', function (): void {
+    $api = new ExpiringSessionGusApi(
+        searchReports: [makeSessionRecoverySearchReport()],
+        bulkReportData: ['123456789'],
+    );
+    $client = new BirClient(new StubGusApiFactory($api), 'api-key');
+    $reportType = BulkReportType::NewLegalEntitiesAndNaturalPersons;
+
+    $initialReport = $client->getBulkReport(new DateTimeImmutable('2026-08-22'), $reportType);
+    $api->expireSession();
+    $recoveredReport = $client->getBulkReport(new DateTimeImmutable('2026-08-23'), $reportType);
+
+    expect($initialReport->reportData)->toBe(['123456789'])
+        ->and($recoveredReport->reportData)->toBe(['123456789'])
+        ->and($api->loginCalls)->toBe(2)
+        ->and($api->bulkReportCalls)->toBe(3);
+});
+
+it('does not renew an active session for a genuinely empty bulk report', function (): void {
+    $api = new ExpiringSessionGusApi([makeSessionRecoverySearchReport()]);
+    $client = new BirClient(new StubGusApiFactory($api), 'api-key');
+
+    $report = $client->getBulkReport(
+        new DateTimeImmutable('2026-08-23'),
+        BulkReportType::NewLegalEntitiesAndNaturalPersons,
+    );
+
+    expect($report->reportData)->toBe([])
+        ->and($api->loginCalls)->toBe(1)
+        ->and($api->bulkReportCalls)->toBe(1);
+});
+
+it('renews a session that expires between a search and a full report', function (): void {
+    $api = new ExpiringSessionGusApi(
+        searchReports: [makeSessionRecoverySearchReport()],
+        fullReportData: [['praw_regon9' => '123456789']],
+    );
+    $client = new BirClient(new StubGusApiFactory($api), 'api-key');
+    $api->expireAfterNextSearch();
+
+    $report = $client->getFullReportByNip('1111111111', ReportType::Organization);
+
+    expect($report->reportData)->toBe([['praw_regon9' => '123456789']])
+        ->and($api->loginCalls)->toBe(2)
+        ->and($api->fullReportCalls)->toBe(2);
 });
 
 it('retries an expired session only once when the replacement session also expires', function (): void {
@@ -86,7 +135,11 @@ it('does not retry or renew an active session after an ordinary API failure', fu
 
 class ExpiringSessionGusApi extends GusApi
 {
+    public int $bulkReportCalls = 0;
+
     public int $dataStatusCalls = 0;
+
+    public int $fullReportCalls = 0;
 
     public int $loginCalls = 0;
 
@@ -95,14 +148,22 @@ class ExpiringSessionGusApi extends GusApi
 
     private bool $expireAfterNextLogin = false;
 
+    private bool $expireAfterSearch = false;
+
     private ?Throwable $nextSearchFailure = null;
 
     private bool $sessionActive = false;
 
-    /** @param list<SearchReport> $searchReports */
+    /**
+     * @param  list<SearchReport>  $searchReports
+     * @param  list<string>  $bulkReportData
+     * @param  array<int, array<string, string>>  $fullReportData
+     */
     public function __construct(
         private readonly array $searchReports,
         private readonly DateTimeImmutable $dataStatus = new DateTimeImmutable('2026-08-23'),
+        private readonly array $bulkReportData = [],
+        private readonly array $fullReportData = [],
     ) {}
 
     public function login(): bool
@@ -134,6 +195,11 @@ class ExpiringSessionGusApi extends GusApi
             throw $failure;
         }
 
+        if ($this->expireAfterSearch) {
+            $this->sessionActive = false;
+            $this->expireAfterSearch = false;
+        }
+
         return $this->searchReports;
     }
 
@@ -148,6 +214,28 @@ class ExpiringSessionGusApi extends GusApi
         return $this->dataStatus;
     }
 
+    public function getBulkReport(DateTimeImmutable $date, string $reportName): array
+    {
+        $this->bulkReportCalls++;
+
+        if (! $this->sessionActive) {
+            return [];
+        }
+
+        return $this->bulkReportData;
+    }
+
+    public function getFullReport(SearchReport $searchReport, string $reportName): array
+    {
+        $this->fullReportCalls++;
+
+        if (! $this->sessionActive) {
+            return [];
+        }
+
+        return $this->fullReportData;
+    }
+
     public function expireSession(): void
     {
         $this->sessionActive = false;
@@ -156,6 +244,11 @@ class ExpiringSessionGusApi extends GusApi
     public function expireImmediatelyAfterNextLogin(): void
     {
         $this->expireAfterNextLogin = true;
+    }
+
+    public function expireAfterNextSearch(): void
+    {
+        $this->expireAfterSearch = true;
     }
 
     public function failNextSearchWith(Throwable $failure): void

@@ -144,6 +144,7 @@ class BirClient implements BirClientInterface
         return $this->execute(function () use ($date, $reportType): BulkReportData {
             $reportData = $this->executeWithSessionRecovery(
                 fn (GusApi $api): array => $api->getBulkReport($date, $reportType->value),
+                static fn (array $result): bool => $result === [],
             );
 
             return new BulkReportData($date, $reportType, $reportData);
@@ -255,6 +256,7 @@ class BirClient implements BirClientInterface
         return $this->execute(function () use ($report, $reportType): FullCompanyReportData {
             $reportData = $this->executeWithSessionRecovery(
                 fn (GusApi $api): array => $api->getFullReport($report, $reportType->value),
+                static fn (array $result): bool => $result === [],
             );
 
             return FullCompanyReportData::fromGusApiReport($report, $reportData);
@@ -265,14 +267,25 @@ class BirClient implements BirClientInterface
      * @template TResult
      *
      * @param  callable(GusApi): TResult  $operation
+     * @param  (callable(TResult): bool)|null  $resultMayIndicateExpiredSession
      * @return TResult
      */
-    private function executeWithSessionRecovery(callable $operation): mixed
-    {
+    private function executeWithSessionRecovery(
+        callable $operation,
+        ?callable $resultMayIndicateExpiredSession = null,
+    ): mixed {
         $api = $this->getAuthenticatedApi();
 
         try {
-            return $operation($api);
+            $result = $operation($api);
+
+            if (
+                $resultMayIndicateExpiredSession === null
+                || ! $resultMayIndicateExpiredSession($result)
+                || ! $this->sessionHasExpired($api)
+            ) {
+                return $result;
+            }
         } catch (InvalidUserKeyException|BirException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
