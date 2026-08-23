@@ -11,13 +11,12 @@ const SANDBOX_REGON = '610188201';
 const SANDBOX_KRS = '0000028860';
 
 beforeEach(function (): void {
-    config()->set('bir-regon.api_key', sandboxApiKey());
-    config()->set('bir-regon.environment', 'dev');
+    config()->set('bir-regon.sandbox_api_key', sandboxApiKey());
 });
 
 it('reads service and data status from the GUS sandbox', function (): void {
-    $serviceStatus = BirRegon::service()->inDev()->get();
-    $dataStatus = BirRegon::service()->inDev()->dataStatus();
+    $serviceStatus = BirRegon::sandbox()->service()->get();
+    $dataStatus = BirRegon::sandbox()->service()->dataStatus();
 
     expect(in_array($serviceStatus->status, [0, 1, 2], true))->toBeTrue()
         ->and($serviceStatus->message)->not->toBeEmpty()
@@ -25,12 +24,13 @@ it('reads service and data status from the GUS sandbox', function (): void {
 })->group('sandbox');
 
 it('searches the GUS sandbox with every identifier variant', function (): void {
-    $byNip = BirRegon::forNip(SANDBOX_NIP)->get();
-    $byRegon = BirRegon::forRegon(SANDBOX_REGON)->get();
-    $byKrs = BirRegon::forKrs(SANDBOX_KRS)->get();
-    $byNips = BirRegon::forNips([SANDBOX_NIP])->get();
-    $byKrsNumbers = BirRegon::forKrsNumbers([SANDBOX_KRS])->get();
-    $byRegons = BirRegon::forRegons9([SANDBOX_REGON])->get();
+    $sandbox = BirRegon::sandbox();
+    $byNip = $sandbox->forNip(SANDBOX_NIP)->get();
+    $byRegon = $sandbox->forRegon(SANDBOX_REGON)->get();
+    $byKrs = $sandbox->forKrs(SANDBOX_KRS)->get();
+    $byNips = $sandbox->forNips([SANDBOX_NIP])->get();
+    $byKrsNumbers = $sandbox->forKrsNumbers([SANDBOX_KRS])->get();
+    $byRegons = $sandbox->forRegons9([SANDBOX_REGON])->get();
 
     expect($byNip->regon)->toBe(SANDBOX_REGON)
         ->and($byRegon->nip)->toBe(SANDBOX_NIP)
@@ -44,7 +44,8 @@ it('searches the GUS sandbox with every identifier variant', function (): void {
 })->group('sandbox');
 
 it('fetches a full company report from the GUS sandbox', function (): void {
-    $report = BirRegon::forRegon(SANDBOX_REGON)
+    $report = BirRegon::sandbox()
+        ->forRegon(SANDBOX_REGON)
         ->reportType(ReportType::Organization)
         ->getFullReport();
 
@@ -54,10 +55,12 @@ it('fetches a full company report from the GUS sandbox', function (): void {
 })->group('sandbox');
 
 it('reads diagnostics after an unsuccessful sandbox search', function (): void {
-    expect(fn () => BirRegon::forNip('0123456700')->get())
+    $sandbox = BirRegon::sandbox();
+
+    expect(fn () => $sandbox->forNip('0123456700')->get())
         ->toThrow(BirNotFoundException::class);
 
-    $diagnostics = BirRegon::diagnostics()->get();
+    $diagnostics = $sandbox->diagnostics()->get();
 
     expect($diagnostics->sessionStatus)->toBe(1)
         ->and($diagnostics->messageCode)->toBe(4)

@@ -1,8 +1,8 @@
 # Laravel BIR REGON
 
-[![CI](https://github.com/cieplik206/laravel-bir-regon/actions/workflows/ci.yml/badge.svg)](https://github.com/cieplik206/laravel-bir-regon/actions/workflows/ci.yml)
-
 A fluent Laravel client for the Polish GUS BIR/REGON SOAP API.
+
+**[Read the full documentation →](https://cieplik206.github.io/laravel-bir-regon/)**
 
 Use a Laravel facade or dependency injection to search businesses by NIP,
 REGON, or KRS, retrieve full and bulk reports, and inspect the current GUS
@@ -24,7 +24,7 @@ $company->toArray();
 - Fluent searches by NIP, REGON, and KRS
 - Batch searches for up to 20 identifiers
 - All full and bulk report types supported by `gusapi/gusapi`
-- Production and GUS test-environment support
+- Separate production and sandbox clients with reusable sessions
 - Typed data objects with array and JSON serialization
 - Laravel auto-discovery, facade, and container bindings
 - Isolated tests plus an opt-in live sandbox suite
@@ -35,8 +35,8 @@ $company->toArray();
 - Laravel 13
 - PHP SOAP and SimpleXML extensions
 
-The package is continuously tested on PHP 8.3, 8.4, and 8.5. PHP 8.3 is
-verified against both the lowest and highest supported dependency versions.
+The test matrix covers PHP 8.3, 8.4, and 8.5. PHP 8.3 is verified against both
+the lowest and highest supported dependency versions.
 
 ## Installation
 
@@ -50,7 +50,13 @@ Add your BIR API key to `.env`:
 
 ```dotenv
 BIR_API_KEY=your-api-key
-BIR_ENVIRONMENT=prod
+```
+
+The official public sandbox key is configured by default. Override it only
+when GUS provides a different test key:
+
+```dotenv
+BIR_SANDBOX_API_KEY=your-test-key
 ```
 
 Laravel discovers the package service provider automatically. You may
@@ -60,8 +66,11 @@ optionally publish the configuration file:
 php artisan vendor:publish --tag=bir-regon-config
 ```
 
-See the [installation](docs/installation.md) and
-[configuration](docs/configuration.md) guides for all available options.
+See the
+[installation](https://cieplik206.github.io/laravel-bir-regon/installation.html)
+and
+[configuration](https://cieplik206.github.io/laravel-bir-regon/configuration.html)
+guides for all available options.
 
 ## Quick start
 
@@ -94,29 +103,37 @@ class FindCompany
 }
 ```
 
-Every request builder can explicitly select the production or test endpoint:
+Production is the default. Select the isolated GUS test client before building
+a sandbox request:
 
 ```php
-$company = BirRegon::forNip('1234567890')
-    ->inDev()
+$company = BirRegon::sandbox()
+    ->forNip('7740001454')
     ->get();
 ```
 
+Production and sandbox keep separate credentials and authenticated sessions.
+Multiple builders created from the same service reuse the appropriate session.
+
 ## Documentation
 
-The complete documentation is available in the [`docs`](docs/README.md)
-directory:
+The complete documentation is available on the
+[documentation website](https://cieplik206.github.io/laravel-bir-regon/):
 
-- [Installation](docs/installation.md)
-- [Configuration](docs/configuration.md)
-- [Basic usage](docs/basic-usage.md)
-- [Batch searches](docs/batch-searches.md)
-- [Full and bulk reports](docs/reports.md)
-- [Data objects](docs/data-objects.md)
-- [Service status and diagnostics](docs/service-status-and-diagnostics.md)
-- [Error handling](docs/error-handling.md)
-- [Testing](docs/testing.md)
-- [Extending the package](docs/extending.md)
+- [Installation](https://cieplik206.github.io/laravel-bir-regon/installation.html)
+- [Configuration](https://cieplik206.github.io/laravel-bir-regon/configuration.html)
+- [Basic usage](https://cieplik206.github.io/laravel-bir-regon/basic-usage.html)
+- [Batch searches](https://cieplik206.github.io/laravel-bir-regon/batch-searches.html)
+- [Full and bulk reports](https://cieplik206.github.io/laravel-bir-regon/reports.html)
+- [Data objects](https://cieplik206.github.io/laravel-bir-regon/data-objects.html)
+- [Service status and diagnostics](https://cieplik206.github.io/laravel-bir-regon/service-status-and-diagnostics.html)
+- [Error handling](https://cieplik206.github.io/laravel-bir-regon/error-handling.html)
+- [Testing](https://cieplik206.github.io/laravel-bir-regon/testing.html)
+- [Laravel Boost support](https://cieplik206.github.io/laravel-bir-regon/laravel-boost.html)
+- [Extending the package](https://cieplik206.github.io/laravel-bir-regon/extending.html)
+
+AI tools can use the
+[`llms.txt` documentation index](https://raw.githubusercontent.com/cieplik206/laravel-bir-regon/main/llms.txt).
 
 ## Testing
 
@@ -133,20 +150,37 @@ requests against the GUS test environment:
 composer test:sandbox
 ```
 
-See [Testing](docs/testing.md) for details.
+See the [testing guide](https://cieplik206.github.io/laravel-bir-regon/testing.html)
+for details.
 
-## AI-assisted development
+## Laravel Boost support
 
-The package ships a Laravel Boost skill with its fluent API conventions,
-report workflow, exception hierarchy, and sandbox guidance. Applications using
-Laravel Boost can discover it after installing the package:
+The package ships the `bir-regon-development` skill for
+[Laravel Boost](https://laravel.com/docs/13.x/boost). It teaches supported AI
+agents the fluent query API, report workflow, exception hierarchy, and sandbox
+testing conventions used by this package.
+
+Install and configure Boost in the consuming Laravel application:
+
+```bash
+composer require laravel/boost --dev
+php artisan boost:install
+```
+
+If Boost was already installed before Laravel BIR REGON, discover the new
+package skill with:
 
 ```bash
 php artisan boost:update --discover
 ```
 
-Third-party package skill discovery requires Laravel Boost 2.2 or newer. The
-skill is optional and does not add Laravel Boost as a package dependency.
+Boost detects skills shipped by Composer packages and offers to install them
+for the AI agents configured in the application. The integration is optional:
+Laravel BIR REGON does not require Boost at runtime.
+
+See the
+[Laravel Boost support guide](https://cieplik206.github.io/laravel-bir-regon/laravel-boost.html)
+for details.
 
 ## Changelog
 

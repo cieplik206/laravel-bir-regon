@@ -36,7 +36,7 @@ class BirSearchBuilder extends BirRequestBuilder
 
     public function search(): CompanyData
     {
-        return $this->searchWithClient($this->resolveClient());
+        return $this->searchWithClient($this->client);
     }
 
     public function get(): CompanyData
@@ -50,15 +50,12 @@ class BirSearchBuilder extends BirRequestBuilder
             throw new BirException('Report type is required to fetch full report.');
         }
 
-        $client = $this->resolveClient();
-
-        if ($this->identifierType === self::TYPE_REGON) {
-            return $client->getFullReport($this->identifier, $this->reportType);
-        }
-
-        $company = $this->searchWithClient($client);
-
-        return $client->getFullReport($company->regon, $this->reportType);
+        return match ($this->identifierType) {
+            self::TYPE_NIP => $this->client->getFullReportByNip($this->identifier, $this->reportType),
+            self::TYPE_KRS => $this->client->getFullReportByKrs($this->identifier, $this->reportType),
+            self::TYPE_REGON => $this->client->getFullReport($this->identifier, $this->reportType),
+            default => throw new BirException('Unsupported search identifier type.'),
+        };
     }
 
     private function searchWithClient(BirClientInterface $client): CompanyData

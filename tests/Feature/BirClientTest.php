@@ -26,7 +26,7 @@ it('fails before making a SOAP request when the API key is missing', function ()
 it('maps all single and batch search operations without repeated logins', function (): void {
     $api = new FakeGusApi(searchReports: [makeGusSearchReport()]);
     $factory = new StubGusApiFactory($api);
-    $client = new BirClient($factory, 'api-key', Environment::Development);
+    $client = new BirClient($factory, 'api-key', Environment::Sandbox);
 
     $singleResults = [
         $client->searchByNip('1234567890'),
@@ -40,7 +40,7 @@ it('maps all single and batch search operations without repeated logins', functi
         $client->searchByRegons14(['12345678901234']),
     ];
 
-    expect($factory->calls)->toBe([['api-key', Environment::Development]])
+    expect($factory->calls)->toBe([['api-key', Environment::Sandbox]])
         ->and($singleResults)->toHaveCount(3)
         ->and($singleResults[0]->regon)->toBe('123456789')
         ->and($batchResults)->toHaveCount(4)

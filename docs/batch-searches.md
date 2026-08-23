@@ -52,15 +52,15 @@ $byRegon14 = BirRegon::forRegons14([
 
 `search()` is available as an alias for `get()` on every batch builder.
 
-## Selecting the environment
+## Searching the sandbox
 
-Environment selection remains fluent:
+Select the sandbox service before creating a batch builder:
 
 ```php
-$companies = BirRegon::forNips([
-    '7740001454',
-])
-    ->inDev()
+$companies = BirRegon::sandbox()
+    ->forNips([
+        '7740001454',
+    ])
     ->get();
 ```
 

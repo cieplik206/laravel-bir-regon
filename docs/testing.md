@@ -41,19 +41,18 @@ Validate the Composer package metadata with:
 composer validate --strict
 ```
 
-## Continuous integration
+## Compatibility matrix
 
-GitHub Actions runs the isolated suite on every push to `main` and on every
-pull request. The test matrix covers:
+The isolated suite is designed to cover:
 
 - PHP 8.3 with the lowest supported dependencies
 - PHP 8.3 with the highest supported dependencies
 - PHP 8.4 with the highest supported dependencies
 - PHP 8.5 with the highest supported dependencies
 
-A separate quality job on PHP 8.5 validates Composer metadata, code style,
-static analysis, and dependency security advisories. The live GUS sandbox
-suite runs separately on a weekly schedule and can also be started manually.
+Before a release, also validate Composer metadata, code style, static analysis,
+and dependency security advisories. Keep the live GUS sandbox suite separate
+from isolated checks because it depends on an external service.
 
 ## GUS sandbox tests
 
@@ -81,6 +80,9 @@ BIR_SANDBOX_API_KEY=your-test-key composer test:sandbox
 
 Use a test key only. Never expose a production BIR key in source control, test
 output, or a public CI configuration.
+
+The integration suite calls `BirRegon::sandbox()`. It never changes the
+production client configuration or sends `BIR_API_KEY` to the test endpoint.
 
 Sandbox tests depend on an external service and mutable test data. They are
 useful as an integration check but should not replace the isolated suite.

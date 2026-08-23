@@ -14,6 +14,7 @@ use DateTimeImmutable;
 use Illuminate\Support\Facades\Facade;
 
 /**
+ * @method static BirRegonService sandbox()
  * @method static BirSearchBuilder forNip(string $nip)
  * @method static BirSearchBuilder forRegon(string $regon)
  * @method static BirSearchBuilder forKrs(string $krs)

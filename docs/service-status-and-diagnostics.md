@@ -25,8 +25,8 @@ status code `1`.
 You can inspect the test environment in the same way:
 
 ```php
-$status = BirRegon::service()
-    ->inDev()
+$status = BirRegon::sandbox()
+    ->service()
     ->status();
 ```
 
@@ -67,9 +67,17 @@ The response contains:
 - `message` — human-readable GUS message
 - `sessionStatus` — current authenticated-session status
 
-Diagnostics require an API key and are tied to the current client session. If
-you need to diagnose calls against the test environment, set
-`BIR_ENVIRONMENT=dev` for the whole process instead of switching only one
-builder with `inDev()`.
+Diagnostics require an API key and are tied to the current client session. Keep
+the sandbox service when a failed request and its diagnostics belong together:
+
+```php
+$sandbox = BirRegon::sandbox();
+
+try {
+    $sandbox->forNip('0123456700')->get();
+} catch (BirNotFoundException) {
+    $diagnostics = $sandbox->diagnostics()->get();
+}
+```
 
 Continue with [Error handling](error-handling.md).

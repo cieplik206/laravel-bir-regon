@@ -22,7 +22,7 @@ composer require cieplik206/laravel-bir-regon
 
 ```dotenv
 BIR_API_KEY=your-api-key
-BIR_ENVIRONMENT=prod
+BIR_SANDBOX_API_KEY=your-test-key
 ```
 
 Laravel discovers the service provider automatically. Publishing
@@ -115,16 +115,22 @@ $report = BirRegon::forDate(new DateTimeImmutable('2026-08-22'))
     ->get();
 ```
 
-## Environments and diagnostics
+## Production, sandbox, and diagnostics
 
-Use `BIR_ENVIRONMENT=prod` or `dev` as the process default. Every request
-builder also supports `inProd()` and `inDev()` for a one-call override:
+Production is the default. Select the dedicated sandbox service before creating
+request builders:
 
 ```php
-$company = BirRegon::forNip($nip)
-    ->inDev()
+$sandbox = BirRegon::sandbox();
+
+$company = $sandbox
+    ->forNip($nip)
     ->get();
 ```
+
+Production and sandbox clients have separate API keys and authenticated
+sessions. Reuse the scoped `$sandbox` service for related calls. Do not add
+environment selection to request builders or instantiate one-off clients.
 
 Service operations are fluent:
 
@@ -135,8 +141,17 @@ $diagnostics = BirRegon::diagnostics()->get();
 ```
 
 Diagnostics describe the active GUS session. When diagnosing a failed sandbox
-call, configure `BIR_ENVIRONMENT=dev` for the entire process so the failed
-request and diagnostics use the same client session.
+call, use the same scoped service for the request and diagnostics:
+
+```php
+$sandbox = BirRegon::sandbox();
+
+try {
+    $sandbox->forNip($nip)->get();
+} catch (BirNotFoundException) {
+    $diagnostics = $sandbox->diagnostics()->get();
+}
+```
 
 ## Results and exceptions
 

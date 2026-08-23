@@ -39,19 +39,7 @@ class BirClient implements BirClientInterface
     ) {
         $apiKey ??= (string) config('bir-regon.api_key', '');
         $this->apiKey = $apiKey;
-        $this->environment = $environment ?? Environment::fromConfig(
-            (string) config('bir-regon.environment', Environment::Production->value),
-        );
-    }
-
-    public function withEnvironment(Environment $environment): BirClientInterface
-    {
-        $client = clone $this;
-        $client->environment = $environment;
-        $client->api = null;
-        $client->loggedIn = false;
-
-        return $client;
+        $this->environment = $environment ?? Environment::Production;
     }
 
     public function searchByNip(string $nip): CompanyData
@@ -121,26 +109,42 @@ class BirClient implements BirClientInterface
         );
     }
 
+    public function getFullReportByNip(string $nip, ReportType $reportType): FullCompanyReportData
+    {
+        return $this->getFullReportFromSearch(
+            fn (GusApi $api) => $api->getByNip($nip),
+            $nip,
+            'NIP',
+            $reportType,
+        );
+    }
+
+    public function getFullReportByKrs(string $krs, ReportType $reportType): FullCompanyReportData
+    {
+        return $this->getFullReportFromSearch(
+            fn (GusApi $api) => $api->getByKrs($krs),
+            $krs,
+            'KRS',
+            $reportType,
+        );
+    }
+
     public function getFullReport(string $regon, ReportType $reportType): FullCompanyReportData
     {
-        $reports = $this->searchReports(
+        return $this->getFullReportFromSearch(
             fn (GusApi $api) => $api->getByRegon($regon),
             $regon,
             'REGON',
+            $reportType,
         );
-        $report = $reports[0];
-
-        return $this->execute(function () use ($report, $reportType): FullCompanyReportData {
-            $reportData = $this->getAuthenticatedApi()->getFullReport($report, $reportType->value);
-
-            return FullCompanyReportData::fromGusApiReport($report, $reportData);
-        });
     }
 
     public function getBulkReport(DateTimeImmutable $date, BulkReportType $reportType): BulkReportData
     {
         return $this->execute(function () use ($date, $reportType): BulkReportData {
-            $reportData = $this->getAuthenticatedApi()->getBulkReport($date, $reportType->value);
+            $reportData = $this->executeWithSessionRecovery(
+                fn (GusApi $api): array => $api->getBulkReport($date, $reportType->value),
+            );
 
             return new BulkReportData($date, $reportType, $reportData);
         });
@@ -161,21 +165,23 @@ class BirClient implements BirClientInterface
     public function getDataStatus(): DateTimeImmutable
     {
         return $this->execute(
-            fn (): DateTimeImmutable => $this->getAuthenticatedApi()->dataStatus(),
+            fn (): DateTimeImmutable => $this->executeWithSessionRecovery(
+                fn (GusApi $api): DateTimeImmutable => $api->dataStatus(),
+            ),
         );
     }
 
     public function getDiagnostics(): DiagnosticsData
     {
-        return $this->execute(function (): DiagnosticsData {
-            $api = $this->getAuthenticatedApi();
-
-            return new DiagnosticsData(
-                messageCode: $api->getMessageCode(),
-                message: $api->getMessage(),
-                sessionStatus: $api->getSessionStatus(),
-            );
-        });
+        return $this->execute(
+            fn (): DiagnosticsData => $this->executeWithSessionRecovery(
+                fn (GusApi $api): DiagnosticsData => new DiagnosticsData(
+                    messageCode: $api->getMessageCode(),
+                    message: $api->getMessage(),
+                    sessionStatus: $api->getSessionStatus(),
+                ),
+            ),
+        );
     }
 
     /**
@@ -213,10 +219,8 @@ class BirClient implements BirClientInterface
      */
     private function searchReports(callable $search, string $identifier, string $type): array
     {
-        $api = $this->getAuthenticatedApi();
-
         try {
-            $reports = $search($api);
+            $reports = $this->executeWithSessionRecovery($search);
 
             if ($reports === []) {
                 throw new BirNotFoundException($identifier, $type);
@@ -234,6 +238,67 @@ class BirClient implements BirClientInterface
         } catch (Throwable $exception) {
             throw new BirException('GUS API error: '.$exception->getMessage(), 0, $exception);
         }
+    }
+
+    /**
+     * @param  callable(GusApi): array<SearchReport>  $search
+     */
+    private function getFullReportFromSearch(
+        callable $search,
+        string $identifier,
+        string $identifierType,
+        ReportType $reportType,
+    ): FullCompanyReportData {
+        $reports = $this->searchReports($search, $identifier, $identifierType);
+        $report = $reports[0];
+
+        return $this->execute(function () use ($report, $reportType): FullCompanyReportData {
+            $reportData = $this->executeWithSessionRecovery(
+                fn (GusApi $api): array => $api->getFullReport($report, $reportType->value),
+            );
+
+            return FullCompanyReportData::fromGusApiReport($report, $reportData);
+        });
+    }
+
+    /**
+     * @template TResult
+     *
+     * @param  callable(GusApi): TResult  $operation
+     * @return TResult
+     */
+    private function executeWithSessionRecovery(callable $operation): mixed
+    {
+        $api = $this->getAuthenticatedApi();
+
+        try {
+            return $operation($api);
+        } catch (InvalidUserKeyException|BirException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            if (! $this->sessionHasExpired($api)) {
+                throw $exception;
+            }
+        }
+
+        $this->resetAuthenticatedApi();
+
+        return $operation($this->getAuthenticatedApi());
+    }
+
+    private function sessionHasExpired(GusApi $api): bool
+    {
+        try {
+            return ! $api->isLogged();
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    private function resetAuthenticatedApi(): void
+    {
+        $this->api = null;
+        $this->loggedIn = false;
     }
 
     /**

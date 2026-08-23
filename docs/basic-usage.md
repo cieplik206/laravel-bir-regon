@@ -65,15 +65,16 @@ container.
 
 ## Using the GUS test environment
 
-Select the test endpoint for an individual call:
+Select the dedicated sandbox service before building the request:
 
 ```php
-$company = BirRegon::forNip('7740001454')
-    ->inDev()
+$company = BirRegon::sandbox()
+    ->forNip('7740001454')
     ->get();
 ```
 
-For an entire local process or test suite, set `BIR_ENVIRONMENT=dev` instead.
+The sandbox service uses `BIR_SANDBOX_API_KEY` and keeps a session independent
+from production. Reuse the returned service for related sandbox calls.
 
 ## Next steps
 

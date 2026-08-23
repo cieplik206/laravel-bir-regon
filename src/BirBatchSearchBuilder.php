@@ -32,13 +32,11 @@ class BirBatchSearchBuilder extends BirRequestBuilder
     /** @return Collection<int, CompanyData> */
     public function search(): Collection
     {
-        $client = $this->resolveClient();
-
         $companies = match ($this->identifierType) {
-            self::TYPE_NIPS => $client->searchByNips($this->identifiers),
-            self::TYPE_KRS_NUMBERS => $client->searchByKrsNumbers($this->identifiers),
-            self::TYPE_REGONS_9 => $client->searchByRegons9($this->identifiers),
-            self::TYPE_REGONS_14 => $client->searchByRegons14($this->identifiers),
+            self::TYPE_NIPS => $this->client->searchByNips($this->identifiers),
+            self::TYPE_KRS_NUMBERS => $this->client->searchByKrsNumbers($this->identifiers),
+            self::TYPE_REGONS_9 => $this->client->searchByRegons9($this->identifiers),
+            self::TYPE_REGONS_14 => $this->client->searchByRegons14($this->identifiers),
             default => throw new BirException('Unsupported batch search identifier type.'),
         };
 

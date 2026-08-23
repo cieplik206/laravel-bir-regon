@@ -9,7 +9,6 @@ use cieplik206\BirRegon\Data\DiagnosticsData;
 use cieplik206\BirRegon\Data\FullCompanyReportData;
 use cieplik206\BirRegon\Data\ServiceStatusData;
 use cieplik206\BirRegon\Enums\BulkReportType;
-use cieplik206\BirRegon\Enums\Environment;
 use cieplik206\BirRegon\Enums\ReportType;
 use cieplik206\BirRegon\Exceptions\BirException;
 use cieplik206\BirRegon\Facades\BirRegon;
@@ -27,17 +26,25 @@ it('searches for a company by NIP', function (): void {
         ->and($client->calls)->toBe([['searchByNip', '1234567890']]);
 });
 
-it('uses a selected environment when searching by REGON', function (): void {
+it('routes sandbox queries through the stable sandbox client', function (): void {
     $company = makeCompanyData(['regon' => '123456789']);
-    $scopedClient = new StubBirClient(company: $company);
-    $client = new StubBirClient(scoped: $scopedClient);
-    $service = new BirRegonService($client);
+    $productionClient = new StubBirClient;
+    $sandboxClient = new StubBirClient(company: $company);
+    $service = new BirRegonService($productionClient, $sandboxClient);
+    $sandbox = $service->sandbox();
 
-    $result = $service->forRegon('123456789')->inDev()->get();
+    $firstResult = $sandbox->forRegon('123456789')->get();
+    $secondResult = $sandbox->forRegon('123456789')->get();
 
-    expect($result)->toBe($company)
-        ->and($client->lastEnvironment)->toBe(Environment::Development)
-        ->and($scopedClient->calls)->toBe([['searchByRegon', '123456789']]);
+    expect($firstResult)->toBe($company)
+        ->and($secondResult)->toBe($company)
+        ->and($service->sandbox())->toBe($sandbox)
+        ->and($sandbox->sandbox())->toBe($sandbox)
+        ->and($productionClient->calls)->toBe([])
+        ->and($sandboxClient->calls)->toBe([
+            ['searchByRegon', '123456789'],
+            ['searchByRegon', '123456789'],
+        ]);
 });
 
 it('fetches a full report after searching by NIP', function (): void {
@@ -52,8 +59,7 @@ it('fetches a full report after searching by NIP', function (): void {
 
     expect($result)->toBe($report)
         ->and($client->calls)->toBe([
-            ['searchByNip', '1234567890'],
-            ['getFullReport', '111222333', ReportType::Organization],
+            ['getFullReportByNip', '1234567890', ReportType::Organization],
         ]);
 });
 

@@ -32,8 +32,10 @@ class AppServiceProvider extends ServiceProvider
 }
 ```
 
-The replacement must implement searches, reports, service information,
-diagnostics, and environment switching declared by the contract.
+The replacement must implement searches, reports, service information, and
+diagnostics declared by the contract. `BirClientInterface` is the production
+client binding; sandbox construction remains isolated by the package service
+provider.
 
 Register the replacement before `BirRegonService` or the `BirRegon` facade is
 first resolved.
@@ -54,8 +56,9 @@ $this->app->singleton(
 ```
 
 This extension point is suitable for a controlled test double or custom
-construction logic. SOAP transport, authentication, and response mapping
-otherwise remain encapsulated by the package.
+construction logic and is used by both the production and sandbox clients.
+SOAP transport, authentication, and response mapping otherwise remain
+encapsulated by the package.
 
 ## Facade and dependency injection
 

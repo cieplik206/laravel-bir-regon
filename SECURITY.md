@@ -20,6 +20,9 @@ sandbox values.
 
 ## Supported versions
 
-Until the first stable release, security fixes are applied to the latest code
-on the default branch. A version support table will be added with the first
-tagged release.
+Security fixes are provided for the latest release in the `1.x` line.
+
+| Version | Supported |
+| --- | --- |
+| 1.x | Yes |
+| < 1.0 | No |

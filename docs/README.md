@@ -21,6 +21,7 @@ the package while exposing typed data objects to the application.
 - [Service status and diagnostics](service-status-and-diagnostics.md)
 - [Error handling](error-handling.md)
 - [Testing](testing.md)
+- [Laravel Boost support](laravel-boost.md)
 
 ## Customization
 
@@ -29,4 +30,4 @@ the package while exposing typed data objects to the application.
 If you are looking for a first working example, start with
 [Basic usage](basic-usage.md).
 
-[Back to the package README](../README.md)
+[Back to the package README](https://github.com/cieplik206/laravel-bir-regon#readme)

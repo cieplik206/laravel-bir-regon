@@ -10,7 +10,6 @@ use cieplik206\BirRegon\Data\DiagnosticsData;
 use cieplik206\BirRegon\Data\FullCompanyReportData;
 use cieplik206\BirRegon\Data\ServiceStatusData;
 use cieplik206\BirRegon\Enums\BulkReportType;
-use cieplik206\BirRegon\Enums\Environment;
 use cieplik206\BirRegon\Enums\ReportType;
 use cieplik206\BirRegon\Exceptions\BirAuthenticationException;
 use cieplik206\BirRegon\Exceptions\BirException;
@@ -19,8 +18,6 @@ use DateTimeImmutable;
 
 interface BirClientInterface
 {
-    public function withEnvironment(Environment $environment): BirClientInterface;
-
     /**
      * @throws BirNotFoundException
      * @throws BirAuthenticationException
@@ -81,6 +78,20 @@ interface BirClientInterface
      * @throws BirException
      */
     public function searchByRegons14(array $regons): array;
+
+    /**
+     * @throws BirNotFoundException
+     * @throws BirAuthenticationException
+     * @throws BirException
+     */
+    public function getFullReportByNip(string $nip, ReportType $reportType): FullCompanyReportData;
+
+    /**
+     * @throws BirNotFoundException
+     * @throws BirAuthenticationException
+     * @throws BirException
+     */
+    public function getFullReportByKrs(string $krs, ReportType $reportType): FullCompanyReportData;
 
     /**
      * @throws BirNotFoundException

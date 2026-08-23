@@ -4,11 +4,30 @@ declare(strict_types=1);
 
 namespace cieplik206\BirRegon;
 
+use cieplik206\BirRegon\Exceptions\BirException;
 use DateTimeImmutable;
 
 class BirRegonService
 {
-    public function __construct(private readonly BirClientInterface $client) {}
+    private ?self $sandboxService = null;
+
+    public function __construct(
+        private readonly BirClientInterface $client,
+        private readonly ?BirClientInterface $sandboxClient = null,
+    ) {}
+
+    public function sandbox(): self
+    {
+        if ($this->sandboxClient === null) {
+            throw new BirException('Sandbox client is not configured.');
+        }
+
+        if ($this->client === $this->sandboxClient) {
+            return $this;
+        }
+
+        return $this->sandboxService ??= new self($this->sandboxClient, $this->sandboxClient);
+    }
 
     public function forNip(string $nip): BirSearchBuilder
     {

@@ -11,7 +11,6 @@ use cieplik206\BirRegon\Data\DiagnosticsData;
 use cieplik206\BirRegon\Data\FullCompanyReportData;
 use cieplik206\BirRegon\Data\ServiceStatusData;
 use cieplik206\BirRegon\Enums\BulkReportType;
-use cieplik206\BirRegon\Enums\Environment;
 use cieplik206\BirRegon\Enums\ReportType;
 use DateTimeImmutable;
 use RuntimeException;
@@ -21,26 +20,16 @@ class StubBirClient implements BirClientInterface
     /** @var array<int, array<int, mixed>> */
     public array $calls = [];
 
-    public ?Environment $lastEnvironment = null;
-
     /** @param  array<int, CompanyData>  $companies */
     public function __construct(
         private readonly ?CompanyData $company = null,
         private readonly ?FullCompanyReportData $report = null,
-        private readonly ?BirClientInterface $scoped = null,
         private readonly array $companies = [],
         private readonly ?BulkReportData $bulkReport = null,
         private readonly ?ServiceStatusData $serviceStatus = null,
         private readonly ?DateTimeImmutable $dataStatus = null,
         private readonly ?DiagnosticsData $diagnostics = null,
     ) {}
-
-    public function withEnvironment(Environment $environment): BirClientInterface
-    {
-        $this->lastEnvironment = $environment;
-
-        return $this->scoped ?? $this;
-    }
 
     public function searchByNip(string $nip): CompanyData
     {
@@ -94,6 +83,20 @@ class StubBirClient implements BirClientInterface
     public function getFullReport(string $regon, ReportType $reportType): FullCompanyReportData
     {
         $this->calls[] = ['getFullReport', $regon, $reportType];
+
+        return $this->report ?? throw new RuntimeException('Report not configured.');
+    }
+
+    public function getFullReportByNip(string $nip, ReportType $reportType): FullCompanyReportData
+    {
+        $this->calls[] = ['getFullReportByNip', $nip, $reportType];
+
+        return $this->report ?? throw new RuntimeException('Report not configured.');
+    }
+
+    public function getFullReportByKrs(string $krs, ReportType $reportType): FullCompanyReportData
+    {
+        $this->calls[] = ['getFullReportByKrs', $krs, $reportType];
 
         return $this->report ?? throw new RuntimeException('Report not configured.');
     }

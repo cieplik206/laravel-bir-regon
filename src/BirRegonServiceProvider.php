@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace cieplik206\BirRegon;
 
+use cieplik206\BirRegon\Enums\Environment;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 
 class BirRegonServiceProvider extends ServiceProvider
@@ -17,7 +19,22 @@ class BirRegonServiceProvider extends ServiceProvider
 
         $this->app->singleton(GusApiFactoryInterface::class, GusApiFactory::class);
         $this->app->singleton(BirClientInterface::class, BirClient::class);
-        $this->app->singleton(BirRegonService::class);
+        $this->app->singleton(
+            BirRegonService::class,
+            static function (Application $app): BirRegonService {
+                $gusApiFactory = $app->make(GusApiFactoryInterface::class);
+                $sandboxClient = new BirClient(
+                    $gusApiFactory,
+                    (string) config('bir-regon.sandbox_api_key', 'abcde12345abcde12345'),
+                    Environment::Sandbox,
+                );
+
+                return new BirRegonService(
+                    $app->make(BirClientInterface::class),
+                    $sandboxClient,
+                );
+            },
+        );
     }
 
     public function boot(): void

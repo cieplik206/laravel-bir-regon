@@ -38,6 +38,6 @@ class BirBulkReportBuilder extends BirRequestBuilder
             throw new BirException('Report type is required to fetch bulk report.');
         }
 
-        return $this->resolveClient()->getBulkReport($this->date, $this->reportType);
+        return $this->client->getBulkReport($this->date, $this->reportType);
     }
 }
