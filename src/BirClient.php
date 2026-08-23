@@ -45,17 +45,17 @@ class BirClient implements BirClientInterface
 
     public function searchByNip(string $nip): CompanyData
     {
-        return $this->searchOne(fn (GusApi $api) => $api->getByNip($nip), $nip, 'NIP');
+        return $this->searchOne(static fn (GusApi $api) => $api->getByNip($nip), $nip, 'NIP');
     }
 
     public function searchByRegon(string $regon): CompanyData
     {
-        return $this->searchOne(fn (GusApi $api) => $api->getByRegon($regon), $regon, 'REGON');
+        return $this->searchOne(static fn (GusApi $api) => $api->getByRegon($regon), $regon, 'REGON');
     }
 
     public function searchByKrs(string $krs): CompanyData
     {
-        return $this->searchOne(fn (GusApi $api) => $api->getByKrs($krs), $krs, 'KRS');
+        return $this->searchOne(static fn (GusApi $api) => $api->getByKrs($krs), $krs, 'KRS');
     }
 
     /**
@@ -65,7 +65,7 @@ class BirClient implements BirClientInterface
     public function searchByNips(array $nips): array
     {
         return $this->searchMany(
-            fn (GusApi $api) => $api->getByNips($nips),
+            static fn (GusApi $api) => $api->getByNips($nips),
             $nips,
             'NIP',
         );
@@ -78,7 +78,7 @@ class BirClient implements BirClientInterface
     public function searchByKrsNumbers(array $krsNumbers): array
     {
         return $this->searchMany(
-            fn (GusApi $api) => $api->getByKrses($krsNumbers),
+            static fn (GusApi $api) => $api->getByKrses($krsNumbers),
             $krsNumbers,
             'KRS',
         );
@@ -91,7 +91,7 @@ class BirClient implements BirClientInterface
     public function searchByRegons9(array $regons): array
     {
         return $this->searchMany(
-            fn (GusApi $api) => $api->getByRegons9($regons),
+            static fn (GusApi $api) => $api->getByRegons9($regons),
             $regons,
             'REGON9',
         );
@@ -104,7 +104,7 @@ class BirClient implements BirClientInterface
     public function searchByRegons14(array $regons): array
     {
         return $this->searchMany(
-            fn (GusApi $api) => $api->getByregons14($regons),
+            static fn (GusApi $api) => $api->getByregons14($regons),
             $regons,
             'REGON14',
         );
@@ -113,7 +113,7 @@ class BirClient implements BirClientInterface
     public function getFullReportByNip(string $nip, ReportType $reportType): FullCompanyReportData
     {
         return $this->getFullReportFromSearch(
-            fn (GusApi $api) => $api->getByNip($nip),
+            static fn (GusApi $api) => $api->getByNip($nip),
             $nip,
             'NIP',
             $reportType,
@@ -123,7 +123,7 @@ class BirClient implements BirClientInterface
     public function getFullReportByKrs(string $krs, ReportType $reportType): FullCompanyReportData
     {
         return $this->getFullReportFromSearch(
-            fn (GusApi $api) => $api->getByKrs($krs),
+            static fn (GusApi $api) => $api->getByKrs($krs),
             $krs,
             'KRS',
             $reportType,
@@ -133,7 +133,7 @@ class BirClient implements BirClientInterface
     public function getFullReport(string $regon, ReportType $reportType): FullCompanyReportData
     {
         return $this->getFullReportFromSearch(
-            fn (GusApi $api) => $api->getByRegon($regon),
+            static fn (GusApi $api) => $api->getByRegon($regon),
             $regon,
             'REGON',
             $reportType,
@@ -142,48 +142,88 @@ class BirClient implements BirClientInterface
 
     public function getBulkReport(DateTimeImmutable $date, BulkReportType $reportType): BulkReportData
     {
-        return $this->execute(function () use ($date, $reportType): BulkReportData {
+        try {
             $reportData = $this->executeWithSessionRecovery(
-                fn (GusApi $api): array => $api->getBulkReport($date, $reportType->value),
+                static fn (GusApi $api): array => $api->getBulkReport($date, $reportType->value),
                 static fn (array $result): bool => $result === [],
             );
 
             return new BulkReportData($date, $reportType, $reportData);
-        });
+        } catch (InvalidUserKeyException $exception) {
+            $this->loggedIn = false;
+
+            throw $this->safeAuthenticationException($exception->getCode());
+        } catch (BirException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            $details = $this->safeExceptionDetails($exception);
+
+            throw $this->safeBirException('GUS API error', $details['message'], $details['code']);
+        }
     }
 
     public function getServiceStatus(): ServiceStatusData
     {
-        return $this->execute(function (): ServiceStatusData {
+        try {
             $api = $this->getUnauthenticatedApi();
 
             return new ServiceStatusData(
                 status: $api->serviceStatus(),
                 message: $api->serviceMessage(),
             );
-        });
+        } catch (InvalidUserKeyException $exception) {
+            $this->loggedIn = false;
+
+            throw $this->safeAuthenticationException($exception->getCode());
+        } catch (BirException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            $details = $this->safeExceptionDetails($exception);
+
+            throw $this->safeBirException('GUS API error', $details['message'], $details['code']);
+        }
     }
 
     public function getDataStatus(): DateTimeImmutable
     {
-        return $this->execute(
-            fn (): DateTimeImmutable => $this->executeWithSessionRecovery(
-                fn (GusApi $api): DateTimeImmutable => $api->dataStatus(),
-            ),
-        );
+        try {
+            return $this->executeWithSessionRecovery(
+                static fn (GusApi $api): DateTimeImmutable => $api->dataStatus(),
+            );
+        } catch (InvalidUserKeyException $exception) {
+            $this->loggedIn = false;
+
+            throw $this->safeAuthenticationException($exception->getCode());
+        } catch (BirException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            $details = $this->safeExceptionDetails($exception);
+
+            throw $this->safeBirException('GUS API error', $details['message'], $details['code']);
+        }
     }
 
     public function getDiagnostics(): DiagnosticsData
     {
-        return $this->execute(
-            fn (): DiagnosticsData => $this->executeWithSessionRecovery(
-                fn (GusApi $api): DiagnosticsData => new DiagnosticsData(
+        try {
+            return $this->executeWithSessionRecovery(
+                static fn (GusApi $api): DiagnosticsData => new DiagnosticsData(
                     messageCode: $api->getMessageCode(),
                     message: $api->getMessage(),
                     sessionStatus: $api->getSessionStatus(),
                 ),
-            ),
-        );
+            );
+        } catch (InvalidUserKeyException $exception) {
+            $this->loggedIn = false;
+
+            throw $this->safeAuthenticationException($exception->getCode());
+        } catch (BirException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            $details = $this->safeExceptionDetails($exception);
+
+            throw $this->safeBirException('GUS API error', $details['message'], $details['code']);
+        }
     }
 
     /**
@@ -234,11 +274,13 @@ class BirClient implements BirClientInterface
         } catch (InvalidUserKeyException $exception) {
             $this->loggedIn = false;
 
-            throw $this->safeAuthenticationException($exception);
+            throw $this->safeAuthenticationException($exception->getCode());
         } catch (BirException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
-            throw $this->safeBirException('GUS API error', $exception);
+            $details = $this->safeExceptionDetails($exception);
+
+            throw $this->safeBirException('GUS API error', $details['message'], $details['code']);
         }
     }
 
@@ -254,14 +296,24 @@ class BirClient implements BirClientInterface
         $reports = $this->searchReports($search, $identifier, $identifierType);
         $report = $reports[0];
 
-        return $this->execute(function () use ($report, $reportType): FullCompanyReportData {
+        try {
             $reportData = $this->executeWithSessionRecovery(
-                fn (GusApi $api): array => $api->getFullReport($report, $reportType->value),
+                static fn (GusApi $api): array => $api->getFullReport($report, $reportType->value),
                 static fn (array $result): bool => $result === [],
             );
 
             return FullCompanyReportData::fromGusApiReport($report, $reportData);
-        });
+        } catch (InvalidUserKeyException $exception) {
+            $this->loggedIn = false;
+
+            throw $this->safeAuthenticationException($exception->getCode());
+        } catch (BirException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            $details = $this->safeExceptionDetails($exception);
+
+            throw $this->safeBirException('GUS API error', $details['message'], $details['code']);
+        }
     }
 
     /**
@@ -270,6 +322,9 @@ class BirClient implements BirClientInterface
      * @param  callable(GusApi): TResult  $operation
      * @param  (callable(TResult): bool)|null  $resultMayIndicateExpiredSession
      * @return TResult
+     *
+     * Callers must pass static callbacks that do not retain this client. PHP
+     * may preserve callback arguments in exception traces.
      */
     private function executeWithSessionRecovery(
         callable $operation,
@@ -321,27 +376,6 @@ class BirClient implements BirClientInterface
         $this->loggedIn = false;
     }
 
-    /**
-     * @template TResult
-     *
-     * @param  callable(): TResult  $operation
-     * @return TResult
-     */
-    private function execute(callable $operation): mixed
-    {
-        try {
-            return $operation();
-        } catch (InvalidUserKeyException $exception) {
-            $this->loggedIn = false;
-
-            throw $this->safeAuthenticationException($exception);
-        } catch (BirException $exception) {
-            throw $exception;
-        } catch (Throwable $exception) {
-            throw $this->safeBirException('GUS API error', $exception);
-        }
-    }
-
     private function getAuthenticatedApi(): GusApi
     {
         $this->ensureLoggedIn();
@@ -358,7 +392,13 @@ class BirClient implements BirClientInterface
         try {
             $this->api = $this->gusApiFactory->make($this->apiKey, $this->environment);
         } catch (Throwable $exception) {
-            throw $this->safeBirException('Failed to connect to GUS API', $exception);
+            $details = $this->safeExceptionDetails($exception);
+
+            throw $this->safeBirException(
+                'Failed to connect to GUS API',
+                $details['message'],
+                $details['code'],
+            );
         }
 
         return $this->api;
@@ -390,15 +430,26 @@ class BirClient implements BirClientInterface
             $api->login();
             $this->loggedIn = true;
         } catch (InvalidUserKeyException $exception) {
-            throw $this->safeAuthenticationException($exception);
+            throw $this->safeAuthenticationException($exception->getCode());
         } catch (BirException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
-            throw $this->safeBirException('Failed to connect to GUS API', $exception);
+            $details = $this->safeExceptionDetails($exception);
+
+            throw $this->safeBirException(
+                'Failed to connect to GUS API',
+                $details['message'],
+                $details['code'],
+            );
         }
     }
 
-    private function safeBirException(string $context, Throwable $exception): BirException
+    /**
+     * Extract only safe scalars before constructing the replacement exception.
+     *
+     * @return array{message: string, code: int}
+     */
+    private function safeExceptionDetails(#[\SensitiveParameter] Throwable $exception): array
     {
         $message = $exception->getMessage();
 
@@ -406,28 +457,35 @@ class BirClient implements BirClientInterface
             $message = str_replace($sensitiveValue, '[REDACTED]', $message);
         }
 
+        return [
+            'message' => $message,
+            'code' => $exception->getCode(),
+        ];
+    }
+
+    private function safeBirException(string $context, string $message, int $code): BirException
+    {
         return new BirException(
             $context.($message === '' ? '.' : ': '.$message),
             0,
-            $this->safePreviousException($exception, $message),
+            $this->safePreviousException($message, $code),
         );
     }
 
-    private function safeAuthenticationException(
-        InvalidUserKeyException $exception,
-    ): BirAuthenticationException {
+    private function safeAuthenticationException(int $code): BirAuthenticationException
+    {
         return new BirAuthenticationException(
             'Invalid API key',
             0,
-            $this->safePreviousException($exception, 'Invalid API key'),
+            $this->safePreviousException('Invalid API key', $code),
         );
     }
 
-    private function safePreviousException(Throwable $exception, string $message): BirException
+    private function safePreviousException(string $message, int $code): BirException
     {
         return new BirException(
             $message === '' ? 'Upstream GUS API error.' : $message,
-            $exception->getCode(),
+            $code,
         );
     }
 

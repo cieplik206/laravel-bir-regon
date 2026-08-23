@@ -72,8 +72,9 @@
           aktualizację Composera do 2.10.2 i konfigurację kluczy podpisów. H-03
           zamknięto przez zredagowaną translację wyjątków, bezpieczną przyczynę
           zastępczą oraz testy regresyjne uruchamiane także przy
-          <code>zend.exception_ignore_args=0</code>. Liczby poniżej opisują
-          pierwotny stan audytowy.
+          <code>zend.exception_ignore_args=0</code>. Macierz ryzyka poniżej
+          zachowuje pierwotny stan audytowy, a licznik testów uwzględnia
+          remediację.
         </p>
       </div>
 
@@ -86,7 +87,7 @@
           <strong>0</strong><span>advisory runtime/dev lock</span>
         </div>
         <div class="metric">
-          <strong>41/158</strong><span>testów / asercji lokalnie i live</span>
+          <strong>43/178</strong><span>testów / asercji lokalnie i live</span>
         </div>
       </div>
 
@@ -788,11 +789,18 @@ stringified exception / Monolog: sentinel-present</code></pre>
         <div class="callout">
           <p>
             <strong>Remediacja:</strong> <code>BirClient</code> redaguje aktywny
-            klucz i SID, odrzuca surowy obiekt upstream oraz zachowuje przez
-            <code>getPrevious()</code> bezpieczny <code>BirException</code> z
-            oczyszczonym komunikatem i oryginalnym kodem błędu. Testy canary
-            potwierdzają brak sekretu w message, previous, string i trace,
-            również przy <code>zend.exception_ignore_args=0</code>.
+            klucz i SID, po czym kończy ramkę przyjmującą surowy
+            <code>Throwable</code>. Nowy łańcuch wyjątków jest budowany
+            wyłącznie z bezpiecznych wartości skalarnych: oczyszczonego
+            komunikatu i oryginalnego kodu błędu.
+            <code>getPrevious()</code> zachowuje bezpieczny
+            <code>BirException</code>, ale nie surowy obiekt upstream. Callbacki
+            operacji są statyczne i nie wiążą ani nie przechwytują instancji
+            klienta. Testy canary sprawdzają message, previous, string i
+            argumenty trace, a przez refleksję odrzucają closure związane z
+            <code>BirClient</code> lub przechwytujące go w zmiennych
+            statycznych. Regresja działa również przy
+            <code>zend.exception_ignore_args=0</code>.
           </p>
         </div>
         <h4>Wpływ</h4>
@@ -1428,7 +1436,12 @@ stringified exception / Monolog: sentinel-present</code></pre>
         </thead>
         <tbody>
           <tr>
-            <td>Redakcja klucza</td>
+            <td>
+              Redakcja klucza
+              <span class="task-status task-status--done"
+                >Status: zrobione</span
+              >
+            </td>
             <td>Canary jako API key i upstream InvalidUserKeyException.</td>
             <td>Wyjątek jest raportowany przez Monolog/Laravel.</td>
             <td>
@@ -1437,12 +1450,34 @@ stringified exception / Monolog: sentinel-present</code></pre>
             </td>
           </tr>
           <tr>
-            <td>Awaria factory</td>
+            <td>
+              Awaria factory
+              <span class="task-status task-status--done"
+                >Status: zrobione</span
+              >
+            </td>
             <td>
               Factory rzuca przy prawidłowym canary, args w trace włączone.
             </td>
             <td>Klient mapuje błąd.</td>
             <td>Klucz i SID są całkowicie zredagowane.</td>
+          </tr>
+          <tr>
+            <td>
+              Callbacki w trace
+              <span class="task-status task-status--done"
+                >Status: zrobione</span
+              >
+            </td>
+            <td>
+              Argumenty wyjątków są włączone, a operacja spoza wyszukiwania
+              rzuca błąd z SID.
+            </td>
+            <td>Klient mapuje błąd po wyjściu z callbacka.</td>
+            <td>
+              Trace nie zawiera closure związanego z
+              <code>BirClient</code> ani przechwytującego klienta.
+            </td>
           </tr>
           <tr>
             <td>Serializacja</td>
@@ -1630,6 +1665,7 @@ stringified exception / Monolog: sentinel-present</code></pre>
 vendor/bin/pint --test
 composer analyse -- --no-progress
 composer test
+php -d zend.exception_ignore_args=0 vendor/bin/pest tests/Feature/BirClientCredentialExposureTest.php
 BIR_SANDBOX_API_KEY=&lt;publiczny-klucz-sandbox&gt; composer test:sandbox
 composer audit --locked --format=json
 composer audit --locked --no-dev --format=json
