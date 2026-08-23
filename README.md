@@ -163,3 +163,5 @@ Please review the [security policy](SECURITY.md) to report vulnerabilities.
 ## License
 
 The MIT License. Please see the [license file](LICENSE.md) for more information.
+Third-party dependencies retain their respective licenses; see the
+[third-party notices](THIRD_PARTY_NOTICES.md).
