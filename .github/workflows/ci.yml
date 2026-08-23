@@ -47,23 +47,51 @@ jobs:
         run: composer audit
 
   tests:
-    name: Tests (PHP ${{ matrix.php }}, ${{ matrix.dependencies }})
+    name: Tests (Laravel ${{ matrix.laravel }}, PHP ${{ matrix.php }}, ${{ matrix.dependencies }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         include:
-          - php: '8.3'
+          - laravel: '12'
+            testbench: '^10.0'
+            php: '8.3'
             dependencies: lowest
             composer-options: --prefer-lowest --prefer-stable
-          - php: '8.3'
+          - laravel: '12'
+            testbench: '^10.0'
+            php: '8.3'
             dependencies: highest
             composer-options: ''
-          - php: '8.4'
+          - laravel: '12'
+            testbench: '^10.0'
+            php: '8.4'
             dependencies: highest
             composer-options: ''
-          - php: '8.5'
+          - laravel: '12'
+            testbench: '^10.0'
+            php: '8.5'
+            dependencies: highest
+            composer-options: ''
+          - laravel: '13'
+            testbench: '^11.0'
+            php: '8.3'
+            dependencies: lowest
+            composer-options: --prefer-lowest --prefer-stable
+          - laravel: '13'
+            testbench: '^11.0'
+            php: '8.3'
+            dependencies: highest
+            composer-options: ''
+          - laravel: '13'
+            testbench: '^11.0'
+            php: '8.4'
+            dependencies: highest
+            composer-options: ''
+          - laravel: '13'
+            testbench: '^11.0'
+            php: '8.5'
             dependencies: highest
             composer-options: ''
 
@@ -78,8 +106,12 @@ jobs:
           coverage: none
           tools: composer:v2
 
-      - name: Install ${{ matrix.dependencies }} dependencies
-        run: composer update ${{ matrix.composer-options }} --prefer-dist --no-interaction --no-progress
+      - name: Install Laravel ${{ matrix.laravel }} with ${{ matrix.dependencies }} dependencies
+        run: >
+          composer update
+          --with "orchestra/testbench:${{ matrix.testbench }}"
+          ${{ matrix.composer-options }}
+          --prefer-dist --no-interaction --no-progress
 
       - name: Run tests
         run: composer test

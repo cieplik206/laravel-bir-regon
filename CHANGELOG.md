@@ -7,6 +7,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-23
+
+### Added
+
+- Laravel 12 support alongside Laravel 13, with CI coverage for both framework
+  versions on PHP 8.3, 8.4, and 8.5
+
 ## [1.0.2] - 2026-08-23
 
 ### Fixed
@@ -34,7 +41,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Isolated tests and opt-in live GUS sandbox tests
 - A discoverable Laravel Boost skill for AI-assisted integrations
 
-[Unreleased]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/cieplik206/laravel-bir-regon/releases/tag/v1.0.0

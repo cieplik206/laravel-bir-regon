@@ -32,11 +32,12 @@ $company->toArray();
 ## Requirements
 
 - PHP 8.3 or newer
-- Laravel 13
+- Laravel 12 or 13
 - PHP SOAP and SimpleXML extensions
 
-The test matrix covers PHP 8.3, 8.4, and 8.5. PHP 8.3 is verified against both
-the lowest and highest supported dependency versions.
+The test matrix covers Laravel 12 and 13 on PHP 8.3, 8.4, and 8.5. PHP 8.3 is
+also verified against the lowest supported dependency versions for each
+Laravel release.
 
 ## Installation
 

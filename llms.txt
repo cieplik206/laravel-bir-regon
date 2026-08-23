@@ -1,6 +1,6 @@
 # Laravel BIR REGON
 
-> `cieplik206/laravel-bir-regon` is a Laravel 13 package for the Polish GUS BIR/REGON SOAP API. It provides fluent facade and dependency-injection workflows for NIP, REGON, and KRS searches, batch lookups, full and bulk reports, service diagnostics, and typed `spatie/laravel-data` results. It requires PHP 8.3 or newer with SOAP and SimpleXML, and its compatibility matrix covers PHP 8.3, 8.4, and 8.5.
+> `cieplik206/laravel-bir-regon` is a Laravel 12 and 13 package for the Polish GUS BIR/REGON SOAP API. It provides fluent facade and dependency-injection workflows for NIP, REGON, and KRS searches, batch lookups, full and bulk reports, service diagnostics, and typed `spatie/laravel-data` results. It requires PHP 8.3 or newer with SOAP and SimpleXML, and its compatibility matrix covers both Laravel releases on PHP 8.3, 8.4, and 8.5.
 
 Keep identifiers as strings to preserve leading zeroes. Use the package enums for report types, use `BirRegon::sandbox()` for the GUS test service, and keep SOAP authentication and session handling inside the package.
 

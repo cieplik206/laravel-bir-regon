@@ -2,7 +2,8 @@
 
 # Testing
 
-The package is tested independently with Pest and Orchestra Testbench. It does
+The package is tested independently with Pest and Orchestra Testbench. Laravel
+12 runs on Testbench 10, while Laravel 13 runs on Testbench 11. The suite does
 not require a fresh Laravel application, the PMS application, a database, or
 any PMS-specific dependency.
 
@@ -45,10 +46,10 @@ composer validate --strict
 
 The isolated suite is designed to cover:
 
-- PHP 8.3 with the lowest supported dependencies
-- PHP 8.3 with the highest supported dependencies
-- PHP 8.4 with the highest supported dependencies
-- PHP 8.5 with the highest supported dependencies
+- Laravel 12 on PHP 8.3 with the lowest and highest supported dependencies
+- Laravel 12 on PHP 8.4 and 8.5 with the highest supported dependencies
+- Laravel 13 on PHP 8.3 with the lowest and highest supported dependencies
+- Laravel 13 on PHP 8.4 and 8.5 with the highest supported dependencies
 
 Before a release, also validate Composer metadata, code style, static analysis,
 and dependency security advisories. Keep the live GUS sandbox suite separate
