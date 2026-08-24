@@ -176,12 +176,15 @@ unquoted dotenv values `true` and `false` are parsed by Laravel as booleans.
 Empty, numeric, quoted, or otherwise malformed values fail closed with
 `LogicException`; they never silently disable the limiter.
 
-Use one shared Redis store and the same prefix for workers or application
-instances on multiple hosts. `ArrayStore` and `FileStore` are local and do not
-coordinate separate hosts. Limiter state is isolated by production or sandbox
-environment and by a SHA-256 fingerprint of the API key. The raw key is not
-written into cache keys. Set `BIR_RATE_LIMIT_ENABLED=false` only when another
-layer coordinates every process using that credential.
+Use one shared Redis store for workers or application instances on multiple
+hosts. Every host must use the same backend and database plus the same effective
+namespace for state and lock connections, including the Redis client
+(`REDIS_PREFIX`), Laravel cache (`CACHE_PREFIX`), and BIR prefixes. `ArrayStore`
+coordinates only one PHP process; `FileStore` is local and does not coordinate
+separate hosts. Limiter state is isolated by production or sandbox environment
+and by a SHA-256 fingerprint of the API key. The raw key is not written into
+cache keys. Set `BIR_RATE_LIMIT_ENABLED=false` only when another layer
+coordinates every process using that credential.
 
 The limiter follows the three official GUS schedules in `Europe/Warsaw`, uses
 a conservative weighted GCRA model for the per-second quota, and uses local
