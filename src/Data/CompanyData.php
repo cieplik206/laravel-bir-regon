@@ -13,8 +13,8 @@ use Spatie\LaravelData\Data;
 class CompanyData extends Data
 {
     public function __construct(
-        public string $regon,
-        public ?string $nip,
+        #[\SensitiveParameter] public string $regon,
+        #[\SensitiveParameter] public ?string $nip,
         public string $name,
         public ?string $city,
         public ?string $postalCode,
@@ -25,14 +25,14 @@ class CompanyData extends Data
         public ?string $district,
         public ?string $commune,
         public EntityType $type,
-        public ?string $regon14,
+        #[\SensitiveParameter] public ?string $regon14,
         public ?NipStatus $nipStatus,
         public Silo $silo,
         public ?string $activityEndDate,
         public ?string $postCity,
     ) {}
 
-    public static function fromSearchResult(SearchResult $result): self
+    public static function fromSearchResult(#[\SensitiveParameter] SearchResult $result): self
     {
         return new self(
             regon: $result->regon,

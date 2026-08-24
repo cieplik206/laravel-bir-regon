@@ -119,7 +119,9 @@ it('builds every search criterion with all seven fields in WSDL order and one no
     $nilCount = 0;
 
     foreach ($fields as $field) {
-        expect($field)->toBeInstanceOf(DOMElement::class);
+        if (! $field instanceof DOMElement) {
+            throw new RuntimeException('Expected the search field to be a DOM element.');
+        }
 
         $actualOrder[] = $field->localName;
 
@@ -221,14 +223,14 @@ it('builds bulk report parameters in documented order', function (): void {
 
 it('uses the current session in the logout body without exposing it through debug info', function (): void {
     $builder = new SoapEnvelopeBuilder('fixture-api-key');
-    $builder->useSession('fixture-session-0001');
+    $builder->useSession('fixtureSession000001');
     $xml = $builder->build(BirOperation::Logout, [], 'https://example.invalid/bir');
 
     expect($xml)->toBeString();
     [, $xpath] = parseBuiltSoapEnvelope((string) $xml);
 
     expect($xpath->evaluate('string(/soap:Envelope/soap:Body/pub:Wyloguj/pub:pIdentyfikatorSesji)'))
-        ->toBe('fixture-session-0001')
+        ->toBe('fixtureSession000001')
         ->and($builder->__debugInfo())->toBe([
             'apiKey' => '[REDACTED]',
             'sessionId' => '[REDACTED]',

@@ -15,10 +15,10 @@ final class NormalizedFullReportData extends Data
      * @param  list<PartnerData>  $partners
      */
     public function __construct(
-        public ?EntityDetailsData $entity = null,
-        public array $localUnits = [],
+        #[\SensitiveParameter] public ?EntityDetailsData $entity = null,
+        #[\SensitiveParameter] public array $localUnits = [],
         public array $pkdActivities = [],
-        public array $partners = [],
+        #[\SensitiveParameter] public array $partners = [],
         public ?EntityType $unitType = null,
     ) {}
 }

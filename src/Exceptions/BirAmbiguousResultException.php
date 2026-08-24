@@ -6,16 +6,20 @@ namespace cieplik206\BirRegon\Exceptions;
 
 final class BirAmbiguousResultException extends BirException
 {
+    public readonly string $identifierType;
+
     public function __construct(
-        public readonly string $identifier,
-        public readonly string $identifierType,
+        string $identifierType,
         public readonly int $compatibleTargetCount,
     ) {
+        $this->identifierType = in_array($identifierType, ['NIP', 'REGON', 'KRS'], true)
+            ? $identifierType
+            : 'UNKNOWN';
+
         parent::__construct(sprintf(
-            'GUS BIR returned %d distinct compatible report targets for %s: %s. Use the plural full-report method to retrieve every result.',
+            'GUS BIR returned %d distinct compatible report targets for the %s identifier. Use the plural full-report method to retrieve every result.',
             $compatibleTargetCount,
-            $identifierType,
-            $identifier,
+            $this->identifierType,
         ));
     }
 }

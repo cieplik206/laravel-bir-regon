@@ -10,8 +10,8 @@ use Spatie\LaravelData\Data;
 final class EntityIdentityData extends Data
 {
     public function __construct(
-        public ?string $regon,
-        public ?string $nip,
+        #[\SensitiveParameter] public ?string $regon,
+        #[\SensitiveParameter] public ?string $nip,
         public ?NipStatus $nipStatus,
         public ?string $name,
         public ?string $shortName,

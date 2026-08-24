@@ -21,11 +21,16 @@ package constraint to `^2.0`.
 
 SimpleXML and PHP's SOAP extension are no longer used by the package. The native
 transport uses libcurl with verified HTTPS, a total request deadline, and a
-streaming response limit. Update the dependency and its lock file with:
+streaming response limit. After 2.0.0 is published, update the dependency and
+its lock file with:
 
 ```bash
 composer require cieplik206/laravel-bir-regon:^2.0 --with-all-dependencies
 ```
+
+Before the release, maintainers may test the 2.x code after it is merged to
+`main` by explicitly requiring `dev-main`. Do not replace a stable production
+constraint with a development branch.
 
 `gusapi/gusapi` is no longer installed by Laravel BIR REGON. If the consuming
 application declared it directly and does not use it elsewhere, remove that
@@ -37,9 +42,9 @@ Existing `BIR_API_KEY` and `BIR_SANDBOX_API_KEY` values continue to work. Add
 the native transport settings to a published `config/bir-regon.php` file:
 
 ```php
-'connection_timeout' => (int) env('BIR_CONNECTION_TIMEOUT', 10),
-'request_timeout' => (int) env('BIR_REQUEST_TIMEOUT', 30),
-'max_response_bytes' => (int) env('BIR_MAX_RESPONSE_BYTES', 10_000_000),
+'connection_timeout' => env('BIR_CONNECTION_TIMEOUT', 10),
+'request_timeout' => env('BIR_REQUEST_TIMEOUT', 30),
+'max_response_bytes' => env('BIR_MAX_RESPONSE_BYTES', 10_000_000),
 'user_agent' => env('BIR_USER_AGENT', 'laravel-bir-regon/2'),
 'rate_limit' => [
     'enabled' => (bool) env('BIR_RATE_LIMIT_ENABLED', true),
@@ -51,6 +56,17 @@ the native transport settings to a published `config/bir-regon.php` file:
 The package defaults are merged when these keys are absent, but adding them
 makes deployment behavior explicit. Rebuild the Laravel configuration cache
 after the change.
+
+The three numeric transport settings are now validated without permissive PHP
+casts. They accept an integer or a canonical decimal integer string within
+these inclusive ranges: connection timeout `1..60` seconds, request timeout
+`1..300` seconds, and response size `1..50000000` bytes. Floats, booleans,
+arrays, surrounding whitespace, and out-of-range values fail closed while the
+Laravel client is resolved.
+
+The native sender also requires TLS 1.2 or newer for the GUS endpoint and for
+an HTTPS proxy, whether that proxy is configured explicitly or discovered by
+libcurl. A custom sender owns and must enforce its own TLS policy.
 
 Laravel-resolved clients now enable a distributed, cache-backed GUS request
 limiter by default. `CacheBirRequestLimiter` accepts only the exact base
@@ -89,9 +105,10 @@ has a 30-second lease and waits at most one second for contention.
 For quota failures, `retryAfterSeconds()` is the longest active second, minute,
 or hour blocker plus clock-rollback recovery, rounded up. Use
 `quotaWasExceeded()` to distinguish quota exhaustion from coordination failure.
-`BIR_RATE_LIMIT_ENABLED=false` disables this protection; constructing
-`NativeSoapTransport` manually also uses an unlimited limiter unless a
-`BirRequestLimiterInterface` is passed explicitly.
+`BIR_RATE_LIMIT_ENABLED=false` makes the Laravel provider select
+`UnlimitedBirRequestLimiter`. Direct `NativeSoapTransport` construction now
+requires a `BirRequestLimiterInterface`; there is no implicit unlimited
+fallback.
 
 ## 3. Replace custom GUS factories
 
@@ -171,10 +188,13 @@ The 2.x constructor accepts one `BirGatewayInterface`:
 use cieplik206\BirRegon\BirClient;
 use cieplik206\BirRegon\Enums\Environment;
 use cieplik206\BirRegon\Gateway\NativeBirGateway;
+use cieplik206\BirRegon\RateLimit\UnlimitedBirRequestLimiter;
 use cieplik206\BirRegon\Transport\NativeSoapTransport;
 
 $transport = new NativeSoapTransport(
     apiKey: $apiKey,
+    // Deliberate only when another layer enforces the GUS quota.
+    requestLimiter: new UnlimitedBirRequestLimiter(),
     environment: Environment::Sandbox,
 );
 
@@ -358,6 +378,29 @@ Version 2 adds focused subclasses of `BirException`:
 Existing code that catches `BirException` remains compatible. Code that
 asserted messages or concrete exceptions originating from `gusapi/gusapi` must
 be updated to the package hierarchy.
+
+The not-found and ambiguity exception constructors no longer accept or retain
+the raw identifier:
+
+```php
+new BirNotFoundException(identifierType: 'NIP');
+new BirAmbiguousResultException(
+    identifierType: 'REGON',
+    compatibleTargetCount: 2,
+);
+```
+
+`BirAmbiguousResultException::$identifier` has been removed. Its safe
+`$identifierType` and `$compatibleTargetCount` properties remain available.
+Package-generated messages identify only the identifier type, and the native
+call path marks NIP, REGON, KRS, search criteria, and operation parameter arrays
+with `#[\SensitiveParameter]` so PHP redacts their stack-trace arguments.
+
+PHP does not inherit parameter attributes from an implemented interface or an
+overridden method. Custom clients, gateways, transports, limiters, validators,
+and test fakes must therefore add `#[\SensitiveParameter]` to every
+implementation parameter that can carry an identifier or an operation
+parameter array.
 
 ## 10. Update tests and fakes
 

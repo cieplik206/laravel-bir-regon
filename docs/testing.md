@@ -103,6 +103,7 @@ It verifies:
 - NIP, REGON, and KRS searches
 - batch searches by NIP, KRS, and REGON-9
 - a full company report
+- the general natural-person report for a historical silo-4 record
 - session diagnostics after an unsuccessful search
 
 The suite defaults to the public key published for the official GUS sandbox.
@@ -118,8 +119,12 @@ output, or a public CI configuration.
 The integration suite calls `BirRegon::sandbox()`. It never changes the
 production client configuration or sends `BIR_API_KEY` to the test endpoint.
 
-Sandbox tests depend on an external service and mutable test data. They are
-useful as an integration check but should not replace the isolated suite.
+Sandbox tests depend on an external service and a dataset that changes
+independently from production. Records may be stale, incomplete, artificial,
+or anonymized. Assert stable protocol shape and the small set of published test
+identifiers needed by the scenario; do not infer production existence or exact
+business data from a sandbox result. Live checks are useful as an integration
+signal but should not replace the isolated suite.
 
 ## Testing request limiting
 
@@ -131,14 +136,16 @@ deterministic single-process unit tests; it does not demonstrate multi-host
 coordination. Tagged caches, repository decorators/subclasses, and unsupported
 stores should be tested as fail-closed paths.
 
-A `NativeSoapTransport` constructed directly without a limiter uses
-`UnlimitedBirRequestLimiter`. This keeps transport fixtures deterministic but
-does not exercise quota behavior. Inject a recording or rejecting
-`BirRequestLimiterInterface` fake to assert operation parameters, weighted
-batch cost, bounded short-delay pacing, fail-fast behavior, and
-`BirRateLimitException` propagation. Tests should advance an injected clock,
-inject a sleeper callback, or assert `retryAfterSeconds()`; they should not use
-real wall-clock sleeps.
+A `NativeSoapTransport` test fixture must pass a limiter explicitly. Use
+`UnlimitedBirRequestLimiter` only for an isolated fixture that cannot open a
+network connection; it does not exercise quota behavior. Inject a recording or
+rejecting `BirRequestLimiterInterface` fake to assert operation parameters,
+weighted batch cost, bounded short-delay pacing, fail-fast behavior, and
+`BirRateLimitException` propagation. Add `#[\SensitiveParameter]` to any fake
+parameter that can carry an identifier or operation parameter array because
+interface attributes are not inherited. Tests should advance an injected
+clock, inject a sleeper callback, or assert `retryAfterSeconds()`; they should
+not use real wall-clock sleeps.
 
 When a fake models the native logical recovery boundary, use the explicit
 `BirRateLimitScopeInterface::beginRateLimitScope()` and
@@ -190,14 +197,16 @@ use DateTimeImmutable;
 final class FakeBirGateway implements BirGatewayInterface
 {
     /** @return list<SearchResult> */
-    public function search(SearchCriteria $criteria): array
+    public function search(#[\SensitiveParameter] SearchCriteria $criteria): array
     {
         return [];
     }
 
     /** @return list<array<string, string>> */
-    public function fullReport(string $regon, ReportType $reportType): array
-    {
+    public function fullReport(
+        #[\SensitiveParameter] string $regon,
+        ReportType $reportType,
+    ): array {
         return [];
     }
 

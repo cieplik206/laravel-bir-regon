@@ -16,7 +16,7 @@ it('keeps a decoded login SID out of dumps and serialized state', function (): v
         throw new RuntimeException('Unable to read the login SOAP fixture.');
     }
 
-    $sessionId = 'fixture-session-0001';
+    $sessionId = 'fixtureSession000001';
     $response = (new SoapResponseDecoder)->decode($fixture, BirOperation::Login);
     $dumped = '';
 
@@ -54,7 +54,7 @@ it('keeps a decoded login SID out of dumps and serialized state', function (): v
 });
 
 it('keeps a restored transport response tombstone safe to inspect', function (): void {
-    $secret = 'fixture-session-0001';
+    $secret = 'fixtureSession000001';
     $restored = unserialize(serialize(TransportResponse::success($secret)));
 
     if (! $restored instanceof TransportResponse) {

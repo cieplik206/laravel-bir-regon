@@ -27,6 +27,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   backend allowlist, and a retry-aware `BirRateLimitException`
 - Add safe typed `SoapFaultCode` and `BirSoapFaultException` reporting without
   retaining the upstream SOAP Reason, Detail, or response body
+- Add first-class explicit HTTP and HTTPS proxy configuration with CONNECT
+  tunneling, optional separate credentials, verified target TLS and verified
+  HTTPS-proxy TLS, and preserved ambient libcurl proxy behavior when explicit
+  configuration is absent
 
 ### Changed
 
@@ -41,6 +45,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Return collections for NIP, REGON, and KRS searches so one identifier can
   expose every matching entity type and silo; provide plural full-report
   methods and reject ambiguous singular full-report selection
+- Change `BirNotFoundException` and `BirAmbiguousResultException` constructors
+  to accept safe identifier metadata only, and remove the public ambiguous
+  result `identifier` property
 - Represent entity type, silo, and non-empty NIP status with strict enums,
   preserve a nullable REGON-14 only when GUS returned it, and reject malformed
   or impossible activity-end dates while accepting the complete `xs:date`
@@ -54,6 +61,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   and enforce singleton cardinality against the original raw rows
 - Replace the PHP SOAP runtime with a bounded cURL sender and require
   `ext-curl`, `ext-dom`, and `ext-libxml`
+- Require an explicit request limiter for direct `NativeSoapTransport`
+  construction, while retaining the cache-backed limiter as Laravel's default
+- Validate transport configuration strictly within 1-60 connection seconds,
+  1-300 request seconds, and 1-50,000,000 response bytes instead of coercing or
+  silently accepting unsafe values
 - Reuse a reset cURL handle within each scoped transport to retain connection,
   DNS, and TLS session caches without retaining request bodies or SID headers
 - Preserve bounded HTTP response bodies and status metadata for completed
@@ -70,6 +82,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `pest-plugin-phpstan`; test Laravel 13 on PHP 8.4 and 8.5, verify the PHP
   8.4.0/Illuminate 13.0 runtime graph separately, and pin GitHub Actions to
   reviewed commit SHAs
+- Clarify that the sandbox uses an independently maintained test dataset that
+  may be stale, incomplete, artificial, or anonymized and cannot establish the
+  current production registry state
 
 ### Fixed
 
@@ -96,6 +111,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   transport/protocol errors without redundant SID diagnostics, classify custom
   sender and limiter failures at their actual boundary, and validate bulk
   REGON length against the selected report family
+- Allow the general natural-person report for historical silo-4 search results
+  while keeping activity and local-unit reports on their narrower silo matrix
+- Preserve typed transport, SOAP-fault, and protocol failures raised while
+  diagnosing an ambiguously empty response instead of reporting incomplete
+  diagnostics
+- Report the environment-specific API-key setting for native production and
+  sandbox clients, and classify a malformed non-empty SID as a protocol failure
+  rather than an invalid key
+- Classify HTTP 200 non-SOAP maintenance responses as transport failures without
+  retaining their body
 
 ### Removed
 
@@ -128,6 +153,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Document that every public GUS string remains untrusted input requiring HTML
   escaping, parameterized SQL, URL/email validation, CSV/XLSX formula-injection
   protection, and control-character handling against log forging
+- Keep explicit proxy URLs and credentials out of debug output, serialized
+  state, and translated exception graphs while retaining TLS verification
+- Remove raw NIP, REGON, and KRS values from not-found and ambiguity exception
+  messages and properties, and redact identifier-bearing native trace arguments
+  with `#[\SensitiveParameter]`
+- Require TLS 1.2 or newer for the GUS connection and for explicitly or
+  ambiently configured HTTPS proxy connections
+- Ignore root-level environment files, local authentication state, and local
+  PHPUnit overrides so an accidental `git add .` cannot stage them
 
 ## [1.1.1] - 2026-08-23
 

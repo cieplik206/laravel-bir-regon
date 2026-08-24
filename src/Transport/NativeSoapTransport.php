@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace cieplik206\BirRegon\Transport;
 
 use cieplik206\BirRegon\Concerns\PreventsSerialization;
+use cieplik206\BirRegon\Contracts\BirEnvironmentAwareTransportInterface;
 use cieplik206\BirRegon\Contracts\BirRateLimitScopeInterface;
 use cieplik206\BirRegon\Contracts\BirRequestLimiterInterface;
 use cieplik206\BirRegon\Contracts\BirSoapTransportInterface;
@@ -16,13 +17,25 @@ use cieplik206\BirRegon\Protocol\SoapEnvelopeBuilder;
 use cieplik206\BirRegon\Protocol\SoapResponseDecoder;
 use cieplik206\BirRegon\Protocol\TransportFailureType;
 use cieplik206\BirRegon\Protocol\TransportResponse;
-use cieplik206\BirRegon\RateLimit\UnlimitedBirRequestLimiter;
+use InvalidArgumentException;
 use SensitiveParameterValue;
 use Throwable;
 
-final class NativeSoapTransport implements BirRateLimitScopeInterface, BirSoapTransportInterface
+final class NativeSoapTransport implements BirEnvironmentAwareTransportInterface, BirRateLimitScopeInterface, BirSoapTransportInterface
 {
     use PreventsSerialization;
+
+    public const MAX_CONNECTION_TIMEOUT_SECONDS = 60;
+
+    public const MAX_REQUEST_TIMEOUT_SECONDS = 300;
+
+    public const MAX_RESPONSE_BYTES = 50_000_000;
+
+    public const MIN_CONNECTION_TIMEOUT_SECONDS = 1;
+
+    public const MIN_REQUEST_TIMEOUT_SECONDS = 1;
+
+    public const MIN_RESPONSE_BYTES = 1;
 
     private readonly SoapEnvelopeBuilder $envelopeBuilder;
 
@@ -40,30 +53,46 @@ final class NativeSoapTransport implements BirRateLimitScopeInterface, BirSoapTr
 
     public function __construct(
         #[\SensitiveParameter] string $apiKey,
+        #[\SensitiveParameter] BirRequestLimiterInterface $requestLimiter,
         private readonly Environment $environment = Environment::Production,
         private readonly int $connectionTimeout = 10,
         private readonly int $requestTimeout = 30,
         int $maxResponseBytes = 10_000_000,
         string $userAgent = 'laravel-bir-regon/2',
         #[\SensitiveParameter] ?BirHttpSenderInterface $httpSender = null,
-        #[\SensitiveParameter] ?BirRequestLimiterInterface $requestLimiter = null,
+        #[\SensitiveParameter] ?string $proxyUrl = null,
+        #[\SensitiveParameter] ?string $proxyUsername = null,
+        #[\SensitiveParameter] ?string $proxyPassword = null,
     ) {
+        self::validateTransportLimits(
+            $connectionTimeout,
+            $requestTimeout,
+            $maxResponseBytes,
+        );
+
         $this->envelopeBuilder = new SoapEnvelopeBuilder($apiKey);
-        $this->responseDecoder = new SoapResponseDecoder(max(1, $maxResponseBytes));
+        $this->responseDecoder = new SoapResponseDecoder($maxResponseBytes);
         $this->authenticationConfigured = preg_match('/^[A-Za-z0-9]{20}$/D', $apiKey) === 1;
         $this->userAgent = preg_match('/^[\x20-\x7E]{1,200}$/D', $userAgent) === 1
             ? $userAgent
             : 'laravel-bir-regon/2';
+        $proxy = CurlProxyConfiguration::from($proxyUrl, $proxyUsername, $proxyPassword);
+
+        if ($httpSender !== null && $proxy !== null) {
+            throw new \LogicException(
+                'BIR proxy configuration cannot be combined with a custom HTTP sender.',
+            );
+        }
+
         $this->httpSender = new SensitiveParameterValue($httpSender ?? new CurlBirHttpSender(
             environment: $environment,
             connectionTimeout: $connectionTimeout,
             requestTimeout: $requestTimeout,
             maxResponseBytes: $maxResponseBytes,
             userAgent: $this->userAgent,
+            proxy: $proxy,
         ));
-        $this->requestLimiter = new SensitiveParameterValue(
-            $requestLimiter ?? new UnlimitedBirRequestLimiter,
-        );
+        $this->requestLimiter = new SensitiveParameterValue($requestLimiter);
     }
 
     public function isAuthenticationConfigured(): bool
@@ -73,6 +102,13 @@ final class NativeSoapTransport implements BirRateLimitScopeInterface, BirSoapTr
         return $this->authenticationConfigured;
     }
 
+    public function environment(): Environment
+    {
+        $this->ensureNotRestoredFromSerialization();
+
+        return $this->environment;
+    }
+
     public function useSession(#[\SensitiveParameter] ?string $sessionId): void
     {
         $this->ensureNotRestoredFromSerialization();
@@ -80,8 +116,10 @@ final class NativeSoapTransport implements BirRateLimitScopeInterface, BirSoapTr
         $this->envelopeBuilder->useSession($sessionId);
     }
 
-    public function call(BirOperation $operation, array $parameters = []): TransportResponse
-    {
+    public function call(
+        BirOperation $operation,
+        #[\SensitiveParameter] array $parameters = [],
+    ): TransportResponse {
         $this->ensureNotRestoredFromSerialization();
         $sessionId = $this->sessionId();
 
@@ -217,7 +255,7 @@ final class NativeSoapTransport implements BirRateLimitScopeInterface, BirSoapTr
 
         if ($rawResponse->httpStatus === 200) {
             if (! $this->responseDecoder->supportsHttpContentType($contentType)) {
-                return TransportResponse::failure(TransportFailureType::Protocol);
+                return TransportResponse::failure(TransportFailureType::Transport);
             }
 
             return $this->responseDecoder->decode(
@@ -242,5 +280,44 @@ final class NativeSoapTransport implements BirRateLimitScopeInterface, BirSoapTr
             $contentType,
             $rawResponse->httpStatus,
         );
+    }
+
+    private static function validateTransportLimits(
+        int $connectionTimeout,
+        int $requestTimeout,
+        int $maxResponseBytes,
+    ): void {
+        if (
+            $connectionTimeout < self::MIN_CONNECTION_TIMEOUT_SECONDS
+            || $connectionTimeout > self::MAX_CONNECTION_TIMEOUT_SECONDS
+        ) {
+            throw new InvalidArgumentException(sprintf(
+                'BIR connection timeout must be between %d and %d seconds.',
+                self::MIN_CONNECTION_TIMEOUT_SECONDS,
+                self::MAX_CONNECTION_TIMEOUT_SECONDS,
+            ));
+        }
+
+        if (
+            $requestTimeout < self::MIN_REQUEST_TIMEOUT_SECONDS
+            || $requestTimeout > self::MAX_REQUEST_TIMEOUT_SECONDS
+        ) {
+            throw new InvalidArgumentException(sprintf(
+                'BIR request timeout must be between %d and %d seconds.',
+                self::MIN_REQUEST_TIMEOUT_SECONDS,
+                self::MAX_REQUEST_TIMEOUT_SECONDS,
+            ));
+        }
+
+        if (
+            $maxResponseBytes < self::MIN_RESPONSE_BYTES
+            || $maxResponseBytes > self::MAX_RESPONSE_BYTES
+        ) {
+            throw new InvalidArgumentException(sprintf(
+                'BIR maximum response size must be between %d and %d bytes.',
+                self::MIN_RESPONSE_BYTES,
+                self::MAX_RESPONSE_BYTES,
+            ));
+        }
     }
 }

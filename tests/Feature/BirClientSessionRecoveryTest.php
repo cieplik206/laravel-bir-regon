@@ -234,7 +234,10 @@ it('maps a GUS not-found record without querying the session status', function (
     $client = new BirClient(new NativeBirGateway($transport));
 
     expect(fn () => $client->searchByNip('0000000000'))
-        ->toThrow(BirNotFoundException::class, 'Nie znaleziono firmy dla NIP: 0000000000')
+        ->toThrow(
+            BirNotFoundException::class,
+            'Nie znaleziono podmiotu dla identyfikatora typu NIP.',
+        )
         ->and(array_column($transport->calls, 0))->toBe([
             BirOperation::Login,
             BirOperation::Search,
@@ -284,8 +287,10 @@ it('restarts the complete public diagnostics snapshot when its session expires m
             $this->sessionId = $sessionId;
         }
 
-        public function call(BirOperation $operation, array $parameters = []): TransportResponse
-        {
+        public function call(
+            BirOperation $operation,
+            #[SensitiveParameter] array $parameters = [],
+        ): TransportResponse {
             if ($operation === BirOperation::Login) {
                 $this->loginCount++;
 

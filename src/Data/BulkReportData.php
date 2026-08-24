@@ -16,6 +16,6 @@ class BulkReportData extends Data
     public function __construct(
         public DateTimeImmutable $date,
         public BulkReportType $reportType,
-        public array $reportData,
+        #[\SensitiveParameter] public array $reportData,
     ) {}
 }

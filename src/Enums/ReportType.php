@@ -26,7 +26,7 @@ enum ReportType: string
     case OrganizationPartners = 'BIR12OsPrawnaSpCywilnaWspolnicy';
     case UnitType = 'BIR12TypPodmiotu';
 
-    public function supports(SearchResult $result): bool
+    public function supports(#[\SensitiveParameter] SearchResult $result): bool
     {
         if (! $result->hasConsistentClassification()) {
             return false;
@@ -37,7 +37,14 @@ enum ReportType: string
         $regonLength = strlen($result->regon);
 
         return match ($this) {
-            self::NaturalPerson,
+            self::NaturalPerson => $type === EntityType::NaturalPerson
+                && in_array($silo, [
+                    Silo::Ceidg,
+                    Silo::Agriculture,
+                    Silo::Other,
+                    Silo::DeletedBefore20141108,
+                ], true)
+                && $regonLength === 9,
             self::NaturalPersonLocals,
             self::NaturalPersonActivity => $type === EntityType::NaturalPerson
                 && in_array($silo, [Silo::Ceidg, Silo::Agriculture, Silo::Other], true)
@@ -73,7 +80,7 @@ enum ReportType: string
         };
     }
 
-    public function reportRegon(SearchResult $result): string
+    public function reportRegon(#[\SensitiveParameter] SearchResult $result): string
     {
         return $result->regon;
     }

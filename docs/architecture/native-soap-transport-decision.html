@@ -51,17 +51,27 @@
       <p>
         Pakiet używa własnego, ograniczonego transportu HTTP opartego na
         libcurl. Koperty SOAP 1.2 i nagłówki WS-Addressing buduje
-        <code>SoapEnvelopeBuilder</code>, <code>CurlBirHttpSender</code> wykonuje
-        pojedyncze żądanie do endpointu wybranego przez zamknięty enum, a
+        <code>SoapEnvelopeBuilder</code>,
+        <code>CurlBirHttpSender</code> wykonuje pojedyncze żądanie do endpointu
+        wybranego przez zamknięty enum, a
         <code>SoapResponseDecoder</code> klasyfikuje zwykłe XML i
         <code>multipart/related</code>. Wewnętrzny XML raportów dekoduje osobna
         warstwa.
       </p>
       <p>
-        Sender utrzymuje jeden uchwyt cURL w obrębie scope klienta i resetuje
-        go przed oraz po każdym żądaniu. Dzięki temu libcurl może ponownie użyć
+        Sender utrzymuje jeden uchwyt cURL w obrębie scope klienta i resetuje go
+        przed oraz po każdym żądaniu. Dzięki temu libcurl może ponownie użyć
         połączenia, cache DNS i sesji TLS, natomiast body, callbacki, nagłówki i
         <code>sid</code> nie przechodzą do następnej operacji.
+      </p>
+      <p>
+        Konfiguracja transportu jest walidowana bez niejawnego lub stratnego
+        rzutowania i bez clampowania. Dopuszcza <code>1..60</code> sekund na
+        połączenie, <code>1..300</code> sekund na całe żądanie oraz
+        <code>1..50000000</code> bajtów odpowiedzi. Wartość spoza zakresu kończy
+        konstrukcję przed otwarciem połączenia. Sender wymaga TLS 1.2 lub
+        nowszego zarówno dla endpointu GUS, jak i dla jawnego albo wykrytego
+        przez libcurl proxy HTTPS.
       </p>
       <p>
         <code>CurlBirHttpSender</code> przekazuje nagłówki, w tym opcjonalny
@@ -93,9 +103,8 @@
           jeden odrębny zgodny REGON raportowy.
         </li>
         <li>
-          <code>EntityType</code> używa przypadków
-          <code>LegalUnit</code>, <code>NaturalPerson</code>,
-          <code>LegalUnitLocalUnit</code> i
+          <code>EntityType</code> używa przypadków <code>LegalUnit</code>,
+          <code>NaturalPerson</code>, <code>LegalUnitLocalUnit</code> i
           <code>NaturalPersonLocalUnit</code>, a silos 6 nazywa się
           <code>Silo::LegalUnits</code>. Niepusty <code>NipStatus</code> także
           jest enumem zgodnym z XSD. REGON-14 jest nullable i występuje tylko
@@ -105,8 +114,8 @@
           strefy czasowej.
         </li>
         <li>
-          Walidacja formatu identyfikatorów jest obowiązkowa; kontrola sum NIP
-          i REGON pozostaje opcjonalna. Dla REGON-14 sprawdzany jest także
+          Walidacja formatu identyfikatorów jest obowiązkowa; kontrola sum NIP i
+          REGON pozostaje opcjonalna. Dla REGON-14 sprawdzany jest także
           osadzony REGON-9. KRS nie ma analogicznej sumy kontrolnej.
         </li>
         <li>
@@ -127,18 +136,18 @@
       <h2>Limiter żądań</h2>
       <p>
         Klient rozwiązywany przez Laravel używa domyślnie
-        <code>CacheBirRequestLimiter</code>. Stan jest współdzielony przez
-        cache obsługujący atomowe blokady, rozdzielony według środowiska i
-        skrótu klucza API. Konserwatywny lokalny model waży koszt operacji,
-        modeluje budżet sekundowy przez czas teoretycznego nadejścia podobny do
-        GCRA, a budżety minutowy i godzinowy prowadzi w stałych oknach
-        kalendarzowych według czasu <code>Europe/Warsaw</code>. Początek okna
-        jest zapisywany jako epoka, dzięki czemu dwie powtórzone godziny
-        podczas zmiany czasu nie współdzielą licznika. Jest to lokalny
-        mechanizm dopuszczenia wyprowadzony z opublikowanych limitów, a nie
-        deklaracja dokładnego, nieopublikowanego algorytmu serwera GUS. Każda
-        operacja SOAP kosztuje jedną jednostkę, zaś wyszukiwanie batch kosztuje
-        tyle jednostek, ile zawiera identyfikatorów.
+        <code>CacheBirRequestLimiter</code>. Stan jest współdzielony przez cache
+        obsługujący atomowe blokady, rozdzielony według środowiska i skrótu
+        klucza API. Konserwatywny lokalny model waży koszt operacji, modeluje
+        budżet sekundowy przez czas teoretycznego nadejścia podobny do GCRA, a
+        budżety minutowy i godzinowy prowadzi w stałych oknach kalendarzowych
+        według czasu <code>Europe/Warsaw</code>. Początek okna jest zapisywany
+        jako epoka, dzięki czemu dwie powtórzone godziny podczas zmiany czasu
+        nie współdzielą licznika. Jest to lokalny mechanizm dopuszczenia
+        wyprowadzony z opublikowanych limitów, a nie deklaracja dokładnego,
+        nieopublikowanego algorytmu serwera GUS. Każda operacja SOAP kosztuje
+        jedną jednostkę, zaś wyszukiwanie batch kosztuje tyle jednostek, ile
+        zawiera identyfikatorów.
       </p>
       <div class="business-logic-block">
         Poza wewnętrznym scope pojedyncze <code>acquire()</code> może wykonać
@@ -163,21 +172,23 @@
         <code>LockProvider</code>. Dekoratory i inne implementacje, między
         innymi <code>TaggedCache</code>, <code>DynamoDbStore</code>,
         <code>FailoverStore</code>, <code>MemoizedStore</code> oraz
-        <code>NullStore</code>, kończą operację fail closed. Lease locka trwa
-        30 sekund, oczekiwanie przy contention najwyżej 1 sekundę, a własność
-        jest ponownie sprawdzana przed zapisem stanu i po nim.
+        <code>NullStore</code>, kończą operację fail closed. Lease locka trwa 30
+        sekund, oczekiwanie przy contention najwyżej 1 sekundę, a własność jest
+        ponownie sprawdzana przed zapisem stanu i po nim.
       </p>
       <p>
-        W aplikacji wielohostowej zalecany jest jeden współdzielony Redis.
-        Store lokalny, taki jak pamięć albo pliki, nie koordynuje niezależnych
-        hostów. Fail closed dla dekoratorów i store spoza allowlisty zapobiega
+        W aplikacji wielohostowej zalecany jest jeden współdzielony Redis. Store
+        lokalny, taki jak pamięć albo pliki, nie koordynuje niezależnych hostów.
+        Fail closed dla dekoratorów i store spoza allowlisty zapobiega
         przypadkowemu rozdzieleniu globalnego budżetu między backendy.
       </p>
       <p>
-        Ręcznie skonstruowany transport pozostaje bez limitera, dopóki
-        implementacja <code>BirRequestLimiterInterface</code> nie zostanie
-        przekazana jawnie. Pozwala to testować transport bez cache, ale wymaga
-        świadomej konfiguracji w integracjach omijających ServiceProvider.
+        Ręcznie konstruowany <code>NativeSoapTransport</code> wymaga jawnej
+        implementacji <code>BirRequestLimiterInterface</code>; nie istnieje
+        niejawny fallback bez limitu. <code>UnlimitedBirRequestLimiter</code>
+        pozostaje świadomym opt-outem wyłącznie dla testu bez sieci albo
+        integracji, w której inna warstwa koordynuje wszystkich użytkowników
+        danego klucza.
       </p>
     </section>
 
@@ -227,8 +238,13 @@
     <section id="bezpieczenstwo" class="level2">
       <h2>Granice bezpieczeństwa</h2>
       <ul>
-        <li>Endpointy są stałe dla produkcji i sandboxa; brak dowolnego URL.</li>
-        <li>TLS weryfikuje certyfikat i nazwę hosta, a przekierowania są wyłączone.</li>
+        <li>
+          Endpointy są stałe dla produkcji i sandboxa; brak dowolnego URL.
+        </li>
+        <li>
+          TLS 1.2 lub nowszy weryfikuje certyfikat i nazwę hosta GUS oraz proxy
+          HTTPS, a przekierowania są wyłączone.
+        </li>
         <li>
           cURL wymusza HTTPS, pełną weryfikację TLS, brak przekierowań,
           skończony deadline oraz limit body egzekwowany podczas odbioru.
@@ -236,6 +252,12 @@
         <li>
           Klucz, SID, XML i body odpowiedzi są oznaczone jako wrażliwe lub
           przechowywane w <code>SensitiveParameterValue</code>.
+        </li>
+        <li>
+          NIP, REGON i KRS nie są powtarzane w komunikatach ani właściwościach
+          wyjątków not-found i ambiguity. Każda natywna ramka przenosząca
+          identyfikator, kryterium lub parametry operacji używa
+          <code>#[SensitiveParameter]</code>.
         </li>
         <li>
           Wyjątki warstwy systemowej są przechwytywane przed opuszczeniem
@@ -274,10 +296,10 @@
           XSD oraz instrukcją GUS BIR 1.2 z 2025-12-31.
         </li>
         <li>
-          Ponad 300 testów deterministycznych obejmuje wszystkie operacje, siedem
-          kryteriów wyszukiwania, MIME/MTOM, framing HTTP, błędy, XXE/DTD,
-          limity body i żądań, wielosilosowe kolekcje, pluralne raporty, ścisłe
-          enumy, normalizację DTO, sesję, logout i jeden retry.
+          Ponad 700 testów deterministycznych obejmuje wszystkie operacje,
+          siedem kryteriów wyszukiwania, MIME/MTOM, framing HTTP, błędy,
+          XXE/DTD, limity body i żądań, wielosilosowe kolekcje, pluralne
+          raporty, ścisłe enumy, normalizację DTO, sesję, logout i jeden retry.
         </li>
         <li>
           Testy canary działają z <code>zend.exception_ignore_args=0</code> i

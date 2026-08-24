@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace cieplik206\BirRegon\Gateway;
 
 use cieplik206\BirRegon\Concerns\PreventsSerialization;
+use cieplik206\BirRegon\Contracts\BirEnvironmentAwareTransportInterface;
 use cieplik206\BirRegon\Contracts\BirGatewayInterface;
 use cieplik206\BirRegon\Contracts\BirRateLimitScopeInterface;
 use cieplik206\BirRegon\Contracts\BirSoapTransportInterface;
@@ -45,7 +46,7 @@ final class NativeBirGateway implements BirGatewayInterface
         $this->transport = new SensitiveParameterValue($transport);
     }
 
-    public function search(SearchCriteria $criteria): array
+    public function search(#[\SensitiveParameter] SearchCriteria $criteria): array
     {
         $decoded = $this->callForRecords(
             BirOperation::Search,
@@ -77,8 +78,10 @@ final class NativeBirGateway implements BirGatewayInterface
         return $results;
     }
 
-    public function fullReport(string $regon, ReportType $reportType): array
-    {
+    public function fullReport(
+        #[\SensitiveParameter] string $regon,
+        ReportType $reportType,
+    ): array {
         $decoded = $this->callForRecords(BirOperation::FullReport, [
             'regon' => $regon,
             'reportType' => $reportType,
@@ -92,7 +95,7 @@ final class NativeBirGateway implements BirGatewayInterface
             }
 
             if ($decoded->error->code === 4) {
-                throw new BirNotFoundException($regon, 'REGON');
+                throw new BirNotFoundException('REGON');
             }
 
             throw new BirReportException(
@@ -269,8 +272,10 @@ final class NativeBirGateway implements BirGatewayInterface
     }
 
     /** @param array<string, mixed> $parameters */
-    private function callForRecords(BirOperation $operation, array $parameters): XmlDecodeResult
-    {
+    private function callForRecords(
+        BirOperation $operation,
+        #[\SensitiveParameter] array $parameters,
+    ): XmlDecodeResult {
         $this->ensureNotRestoredFromSerialization();
 
         $transport = $this->transport();
@@ -289,7 +294,7 @@ final class NativeBirGateway implements BirGatewayInterface
     /** @param array<string, mixed> $parameters */
     private function callForRecordsWithinScope(
         BirOperation $operation,
-        array $parameters,
+        #[\SensitiveParameter] array $parameters,
     ): XmlDecodeResult {
 
         for ($attempt = 0; $attempt < 2; $attempt++) {
@@ -341,8 +346,10 @@ final class NativeBirGateway implements BirGatewayInterface
     }
 
     /** @param array<string, mixed> $parameters */
-    private function callAuthenticatedScalar(BirOperation $operation, array $parameters): string
-    {
+    private function callAuthenticatedScalar(
+        BirOperation $operation,
+        #[\SensitiveParameter] array $parameters,
+    ): string {
         for ($attempt = 0; $attempt < 2; $attempt++) {
             $this->ensureSession();
             $response = $this->callTransport($operation, $parameters);
@@ -375,8 +382,10 @@ final class NativeBirGateway implements BirGatewayInterface
     }
 
     /** @param array<string, mixed> $parameters */
-    private function callUnauthenticated(BirOperation $operation, array $parameters): string
-    {
+    private function callUnauthenticated(
+        BirOperation $operation,
+        #[\SensitiveParameter] array $parameters,
+    ): string {
         try {
             $transport = $this->transport();
             $transport->useSession(null);
@@ -403,14 +412,27 @@ final class NativeBirGateway implements BirGatewayInterface
         }
 
         try {
-            $authenticationConfigured = $this->transport()->isAuthenticationConfigured();
+            $transport = $this->transport();
+            $authenticationConfigured = $transport->isAuthenticationConfigured();
         } catch (Throwable) {
             throw new BirTransportException('Unable to configure GUS BIR authentication.');
         }
 
         if (! $authenticationConfigured) {
+            $environmentVariable = null;
+
+            if ($transport instanceof BirEnvironmentAwareTransportInterface) {
+                try {
+                    $environmentVariable = $transport->environment()->apiKeyEnvironmentVariable();
+                } catch (Throwable) {
+                    // Environment metadata is optional; keep the safe neutral hint.
+                }
+            }
+
             throw new BirAuthenticationException(
-                'BIR API key is not configured. Set BIR_API_KEY in your .env file.',
+                $environmentVariable === null
+                    ? 'BIR API key is not configured for the selected environment. Configure BIR_API_KEY for production or BIR_SANDBOX_API_KEY for sandbox.'
+                    : 'BIR API key is not configured. Set '.$environmentVariable.' in your .env file.',
             );
         }
 
@@ -430,8 +452,12 @@ final class NativeBirGateway implements BirGatewayInterface
 
         $sessionId = $response->result() ?? '';
 
-        if (preg_match('/^[A-Za-z0-9]{20}$/D', $sessionId) !== 1) {
+        if ($sessionId === '') {
             throw new BirAuthenticationException('Invalid API key');
+        }
+
+        if (preg_match('/^[A-Za-z0-9]{20}$/D', $sessionId) !== 1) {
+            throw new BirProtocolException('GUS BIR returned an invalid session identifier.');
         }
 
         $this->session->start($sessionId);
@@ -446,8 +472,10 @@ final class NativeBirGateway implements BirGatewayInterface
     }
 
     /** @param array<string, mixed> $parameters */
-    private function callTransport(BirOperation $operation, array $parameters): TransportResponse
-    {
+    private function callTransport(
+        BirOperation $operation,
+        #[\SensitiveParameter] array $parameters,
+    ): TransportResponse {
         return $this->callTransportUsingSession(
             $operation,
             $parameters,
@@ -458,7 +486,7 @@ final class NativeBirGateway implements BirGatewayInterface
     /** @param array<string, mixed> $parameters */
     private function callTransportUsingSession(
         BirOperation $operation,
-        array $parameters,
+        #[\SensitiveParameter] array $parameters,
         #[\SensitiveParameter] ?string $sessionId,
     ): TransportResponse {
         try {
@@ -502,17 +530,21 @@ final class NativeBirGateway implements BirGatewayInterface
             throw new BirProtocolException('GUS BIR returned invalid diagnostics.');
         }
 
-        $status = $statusResponse->successful ? trim($statusResponse->result() ?? '') : null;
-        $rawMessageCode = $messageCodeResponse->successful
-            ? trim($messageCodeResponse->result() ?? '')
-            : null;
+        foreach ([$statusResponse, $messageCodeResponse] as $response) {
+            if (! $response->successful) {
+                $this->throwTransportFailure($response);
+            }
+        }
+
+        $status = trim($statusResponse->result() ?? '');
+        $rawMessageCode = trim($messageCodeResponse->result() ?? '');
 
         $active = match ($status) {
             '', '0' => false,
             '1' => true,
             default => null,
         };
-        $messageCode = is_string($rawMessageCode) && preg_match('/^\d+$/D', $rawMessageCode) === 1
+        $messageCode = preg_match('/^\d+$/D', $rawMessageCode) === 1
             ? (int) $rawMessageCode
             : null;
 

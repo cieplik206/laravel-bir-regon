@@ -19,7 +19,7 @@ final class PolishIdentifierChecksum
 
     private function __construct() {}
 
-    public static function isValidNip(string $nip): bool
+    public static function isValidNip(#[\SensitiveParameter] string $nip): bool
     {
         if (! preg_match('/^\d{10}$/D', $nip)) {
             return false;
@@ -30,7 +30,7 @@ final class PolishIdentifierChecksum
         return $checksum !== 10 && $checksum === (int) $nip[9];
     }
 
-    public static function isValidRegon(string $regon): bool
+    public static function isValidRegon(#[\SensitiveParameter] string $regon): bool
     {
         return match (strlen($regon)) {
             9 => self::isValidRegon9($regon),
@@ -39,7 +39,7 @@ final class PolishIdentifierChecksum
         };
     }
 
-    public static function isValidRegon9(string $regon): bool
+    public static function isValidRegon9(#[\SensitiveParameter] string $regon): bool
     {
         if (! preg_match('/^\d{9}$/D', $regon)) {
             return false;
@@ -48,7 +48,7 @@ final class PolishIdentifierChecksum
         return self::regonChecksum(substr($regon, 0, 8), self::REGON9_WEIGHTS) === (int) $regon[8];
     }
 
-    public static function isValidRegon14(string $regon): bool
+    public static function isValidRegon14(#[\SensitiveParameter] string $regon): bool
     {
         if (! preg_match('/^\d{14}$/D', $regon)) {
             return false;
@@ -58,28 +58,28 @@ final class PolishIdentifierChecksum
             && self::regonChecksum(substr($regon, 0, 13), self::REGON14_WEIGHTS) === (int) $regon[13];
     }
 
-    public static function assertValidNip(string $nip): void
+    public static function assertValidNip(#[\SensitiveParameter] string $nip): void
     {
         if (! self::isValidNip($nip)) {
             throw new BirValidationException('NIP checksum is invalid.');
         }
     }
 
-    public static function assertValidRegon(string $regon): void
+    public static function assertValidRegon(#[\SensitiveParameter] string $regon): void
     {
         if (! self::isValidRegon($regon)) {
             throw new BirValidationException('REGON checksum is invalid.');
         }
     }
 
-    public static function assertValidRegon9(string $regon): void
+    public static function assertValidRegon9(#[\SensitiveParameter] string $regon): void
     {
         if (! self::isValidRegon9($regon)) {
             throw new BirValidationException('REGON-9 checksum is invalid.');
         }
     }
 
-    public static function assertValidRegon14(string $regon): void
+    public static function assertValidRegon14(#[\SensitiveParameter] string $regon): void
     {
         if (! self::isValidRegon14($regon)) {
             throw new BirValidationException('REGON-14 checksum is invalid.');
@@ -87,16 +87,20 @@ final class PolishIdentifierChecksum
     }
 
     /** @param list<int> $weights */
-    private static function regonChecksum(string $digits, array $weights): int
-    {
+    private static function regonChecksum(
+        #[\SensitiveParameter] string $digits,
+        array $weights,
+    ): int {
         $checksum = self::weightedModulo($digits, $weights);
 
         return $checksum === 10 ? 0 : $checksum;
     }
 
     /** @param list<int> $weights */
-    private static function weightedModulo(string $digits, array $weights): int
-    {
+    private static function weightedModulo(
+        #[\SensitiveParameter] string $digits,
+        array $weights,
+    ): int {
         $sum = 0;
 
         foreach ($weights as $position => $weight) {

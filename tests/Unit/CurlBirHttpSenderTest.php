@@ -6,6 +6,8 @@ use cieplik206\BirRegon\Enums\Environment;
 use cieplik206\BirRegon\Protocol\BirOperation;
 use cieplik206\BirRegon\Transport\CurlBirHttpSender;
 use cieplik206\BirRegon\Transport\CurlExecutorInterface;
+use cieplik206\BirRegon\Transport\CurlOptionSetterInterface;
+use cieplik206\BirRegon\Transport\CurlProxyConfiguration;
 
 function curlTraceContains(mixed $value, string $needle): bool
 {
@@ -263,4 +265,154 @@ it('isolates persistent handles between sender instances', function (): void {
 
     expect($handleIds)->toHaveCount(2)
         ->and($handleIds[1])->not->toBe($handleIds[0]);
+});
+
+it('reapplies explicit proxy routing after every handle reset while preserving target TLS verification', function (): void {
+    $observed = [
+        'setMany' => [],
+        'set' => [],
+        'executions' => 0,
+    ];
+    $setter = new class($observed) implements CurlOptionSetterInterface
+    {
+        /** @param array{setMany: list<array<int, mixed>>, set: list<array{int, mixed}>, executions: int} $observed */
+        public function __construct(public array &$observed) {}
+
+        public function setMany(
+            CurlHandle $handle,
+            #[SensitiveParameter] array $options,
+        ): bool {
+            unset($handle);
+            $this->observed['setMany'][] = $options;
+
+            return true;
+        }
+
+        public function set(
+            CurlHandle $handle,
+            int $option,
+            #[SensitiveParameter] mixed $value,
+        ): bool {
+            unset($handle);
+            $this->observed['set'][] = [$option, $value];
+
+            return true;
+        }
+    };
+    $executor = new class($observed) implements CurlExecutorInterface
+    {
+        /** @param array{setMany: list<array<int, mixed>>, set: list<array{int, mixed}>, executions: int} $observed */
+        public function __construct(public array &$observed) {}
+
+        public function execute(
+            CurlHandle $handle,
+            #[SensitiveParameter] array $headers,
+            #[SensitiveParameter] string $body,
+        ): bool {
+            unset($handle, $headers, $body);
+            $this->observed['executions']++;
+
+            return false;
+        }
+    };
+    $proxy = CurlProxyConfiguration::from(
+        'https://proxy.example.test:8443',
+        'proxy-user',
+        'proxy-password',
+    );
+
+    if (! $proxy instanceof CurlProxyConfiguration) {
+        throw new LogicException('The valid proxy configuration was disabled.');
+    }
+
+    $sender = new CurlBirHttpSender(
+        environment: Environment::Sandbox,
+        connectionTimeout: 1,
+        requestTimeout: 1,
+        maxResponseBytes: 1024,
+        userAgent: 'laravel-bir-regon-tests/2',
+        executor: $executor,
+        proxy: $proxy,
+        optionSetter: $setter,
+    );
+
+    $sender->send(BirOperation::Login, '<soap:first/>', null);
+    $sender->send(BirOperation::Login, '<soap:second/>', null);
+
+    $proxyOptions = array_values(array_filter(
+        $observed['set'],
+        static fn (array $call): bool => $call[0] === CURLOPT_PROXY,
+    ));
+
+    expect($observed['executions'])->toBe(2)
+        ->and($observed['setMany'])->toHaveCount(2)
+        ->and($observed['setMany'][0][CURLOPT_SSL_VERIFYHOST])->toBe(2)
+        ->and($observed['setMany'][0][CURLOPT_SSL_VERIFYPEER])->toBeTrue()
+        ->and($observed['setMany'][0][CURLOPT_SSLVERSION])->toBe(CURL_SSLVERSION_TLSv1_2)
+        ->and($observed['setMany'][0][CURLOPT_PROXY_SSLVERSION])->toBe(CURL_SSLVERSION_TLSv1_2)
+        ->and($observed['setMany'][1][CURLOPT_SSLVERSION])->toBe(CURL_SSLVERSION_TLSv1_2)
+        ->and($observed['setMany'][1][CURLOPT_PROXY_SSLVERSION])->toBe(CURL_SSLVERSION_TLSv1_2)
+        ->and($proxyOptions)->toBe([
+            [CURLOPT_PROXY, 'https://proxy.example.test:8443'],
+            [CURLOPT_PROXY, 'https://proxy.example.test:8443'],
+        ]);
+});
+
+it('does not execute a request when applying explicit proxy options fails', function (): void {
+    $executorCalls = 0;
+    $setter = new class implements CurlOptionSetterInterface
+    {
+        public function setMany(
+            CurlHandle $handle,
+            #[SensitiveParameter] array $options,
+        ): bool {
+            unset($handle, $options);
+
+            return true;
+        }
+
+        public function set(
+            CurlHandle $handle,
+            int $option,
+            #[SensitiveParameter] mixed $value,
+        ): bool {
+            unset($handle, $value);
+
+            return $option !== CURLOPT_PROXY;
+        }
+    };
+    $executor = new class($executorCalls) implements CurlExecutorInterface
+    {
+        public function __construct(public int &$calls) {}
+
+        public function execute(
+            CurlHandle $handle,
+            #[SensitiveParameter] array $headers,
+            #[SensitiveParameter] string $body,
+        ): bool {
+            unset($handle, $headers, $body);
+            $this->calls++;
+
+            return false;
+        }
+    };
+    $proxy = CurlProxyConfiguration::from('https://proxy.example.test:8443');
+
+    if (! $proxy instanceof CurlProxyConfiguration) {
+        throw new LogicException('The valid proxy configuration was disabled.');
+    }
+
+    $result = (new CurlBirHttpSender(
+        environment: Environment::Sandbox,
+        connectionTimeout: 1,
+        requestTimeout: 1,
+        maxResponseBytes: 1024,
+        userAgent: 'laravel-bir-regon-tests/2',
+        executor: $executor,
+        proxy: $proxy,
+        optionSetter: $setter,
+    ))->send(BirOperation::Login, '<soap:Envelope/>', null);
+
+    expect($result->successful)->toBeFalse()
+        ->and($executorCalls)->toBe(0);
 });

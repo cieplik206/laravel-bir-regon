@@ -85,8 +85,10 @@ final class CacheBirRequestLimiter implements BirRateLimitScopeInterface, BirReq
         $this->sleeper = $sleeper === null ? null : new SensitiveParameterValue($sleeper);
     }
 
-    public function acquire(BirOperation $operation, array $parameters = []): void
-    {
+    public function acquire(
+        BirOperation $operation,
+        #[\SensitiveParameter] array $parameters = [],
+    ): void {
         $this->ensureNotRestoredFromSerialization();
 
         $cost = $this->requestCost($operation, $parameters);
@@ -186,8 +188,10 @@ final class CacheBirRequestLimiter implements BirRateLimitScopeInterface, BirReq
     }
 
     /** @param array<string, mixed> $parameters */
-    private function requestCost(BirOperation $operation, array $parameters): int
-    {
+    private function requestCost(
+        BirOperation $operation,
+        #[\SensitiveParameter] array $parameters,
+    ): int {
         if ($operation !== BirOperation::Search) {
             return 1;
         }

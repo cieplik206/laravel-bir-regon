@@ -20,13 +20,17 @@ sandbox values.
 
 ## Supported versions
 
-The `main` branch is the development line for the next `2.x` release. Security
-fixes are provided for that development line and, after publication, for the
-latest `2.x` release. The legacy `1.x` line is not maintained; this policy does
-not promise security fixes for `1.x` while version 2 is being prepared.
+The latest `1.1.x` release is the currently supported stable line. Work on the
+next `2.x` release is active but unpublished and must not be treated as a
+released replacement for `1.1.x`. Security fixes are accepted for both the
+supported stable line and active `2.x` development.
 
 | Version | Supported |
 | --- | --- |
-| 2.x (current `main`; next release) | Yes |
-| 1.x | No |
-| < 1.0 | No |
+| 2.x (unreleased) | Development only |
+| Latest 1.1.x release | Yes |
+| 1.0.x and older | No |
+
+This policy must be updated when `2.0.0` is published. That update should state
+the support status and any end-of-life or migration period for the `1.1.x`
+line instead of assuming that publication alone ends its support.

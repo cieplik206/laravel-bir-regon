@@ -6,6 +6,7 @@ use cieplik206\BirRegon\Contracts\BirRequestLimiterInterface;
 use cieplik206\BirRegon\Enums\Environment;
 use cieplik206\BirRegon\Protocol\BirOperation;
 use cieplik206\BirRegon\Protocol\RawTransportResult;
+use cieplik206\BirRegon\RateLimit\UnlimitedBirRequestLimiter;
 use cieplik206\BirRegon\Transport\BirHttpSenderInterface;
 use cieplik206\BirRegon\Transport\NativeSoapTransport;
 use Symfony\Component\VarDumper\Cloner\VarCloner;
@@ -85,6 +86,7 @@ it('does not expose request credentials to a global error handler backtrace', fu
 
         $transport = new NativeSoapTransport(
             apiKey: $apiKey,
+            requestLimiter: new UnlimitedBirRequestLimiter,
             environment: Environment::Sandbox,
             httpSender: $sender,
         );
@@ -149,5 +151,8 @@ final readonly class NativeTransportExporterLimiter implements BirRequestLimiter
 {
     public function __construct(public string $secret) {}
 
-    public function acquire(BirOperation $operation, array $parameters = []): void {}
+    public function acquire(
+        BirOperation $operation,
+        #[SensitiveParameter] array $parameters = [],
+    ): void {}
 }

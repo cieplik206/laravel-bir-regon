@@ -90,7 +90,7 @@ final readonly class XmlRecordsDecoder
     }
 
     /** @param array<string, string> $record */
-    private function errorFromRecord(array $record): ?BirErrorData
+    private function errorFromRecord(#[\SensitiveParameter] array $record): ?BirErrorData
     {
         $rawCode = $record['ErrorCode'] ?? '';
 

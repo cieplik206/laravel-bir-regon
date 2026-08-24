@@ -7,6 +7,7 @@ use cieplik206\BirRegon\Enums\SoapFaultCode;
 use cieplik206\BirRegon\Protocol\BirOperation;
 use cieplik206\BirRegon\Protocol\RawTransportResult;
 use cieplik206\BirRegon\Protocol\TransportFailureType;
+use cieplik206\BirRegon\RateLimit\UnlimitedBirRequestLimiter;
 use cieplik206\BirRegon\Transport\BirHttpSenderInterface;
 use cieplik206\BirRegon\Transport\NativeSoapTransport;
 
@@ -34,12 +35,13 @@ it('decodes a plain SOAP body using the HTTP content type returned by the sender
     };
     $response = (new NativeSoapTransport(
         apiKey: 'APIKEYSENTINEL123456',
+        requestLimiter: new UnlimitedBirRequestLimiter,
         environment: Environment::Sandbox,
         httpSender: $sender,
     ))->call(BirOperation::Login);
 
     expect($response->successful)->toBeTrue()
-        ->and($response->result())->toBe('fixture-session-0001');
+        ->and($response->result())->toBe('fixtureSession000001');
 });
 
 it('decodes a MIME SOAP body using the multipart HTTP content type returned by the sender', function (): void {
@@ -81,18 +83,20 @@ it('decodes a MIME SOAP body using the multipart HTTP content type returned by t
     };
     $response = (new NativeSoapTransport(
         apiKey: 'APIKEYSENTINEL123456',
+        requestLimiter: new UnlimitedBirRequestLimiter,
         environment: Environment::Sandbox,
         httpSender: $sender,
     ))->call(BirOperation::Login);
 
     expect($response->successful)->toBeTrue()
-        ->and($response->result())->toBe('fixture-session-0001');
+        ->and($response->result())->toBe('fixtureSession000001');
 });
 
 it('decodes top-level XOP SOAP using its declared SOAP media type', function (): void {
     $body = nativeTransportHttpFixture('soap/login-success.xml');
     $response = (new NativeSoapTransport(
         apiKey: 'APIKEYSENTINEL123456',
+        requestLimiter: new UnlimitedBirRequestLimiter,
         environment: Environment::Sandbox,
         httpSender: new NativeTransportCompletedExchangeSender(
             $body,
@@ -102,7 +106,7 @@ it('decodes top-level XOP SOAP using its declared SOAP media type', function ():
     ))->call(BirOperation::Login);
 
     expect($response->successful)->toBeTrue()
-        ->and($response->result())->toBe('fixture-session-0001');
+        ->and($response->result())->toBe('fixtureSession000001');
 });
 
 it('preserves a typed SOAP fault returned with its standard HTTP status', function (
@@ -117,6 +121,7 @@ it('preserves a typed SOAP fault returned with its standard HTTP status', functi
 
     $response = (new NativeSoapTransport(
         apiKey: 'APIKEYSENTINEL123456',
+        requestLimiter: new UnlimitedBirRequestLimiter,
         environment: Environment::Sandbox,
         httpSender: new NativeTransportCompletedExchangeSender(
             $body,
@@ -141,6 +146,7 @@ it('classifies completed HTTP failures without a SOAP fault as transport failure
 ): void {
     $response = (new NativeSoapTransport(
         apiKey: 'APIKEYSENTINEL123456',
+        requestLimiter: new UnlimitedBirRequestLimiter,
         environment: Environment::Sandbox,
         httpSender: new NativeTransportCompletedExchangeSender(
             $body,
@@ -153,6 +159,11 @@ it('classifies completed HTTP failures without a SOAP fault as transport failure
         ->and($response->failureType)->toBe(TransportFailureType::Transport)
         ->and($response->soapFaultCode)->toBeNull();
 })->with([
+    'HTTP 200 HTML maintenance page' => [
+        200,
+        'text/html; charset=UTF-8',
+        '<html><body>Przerwa techniczna</body></html>',
+    ],
     'HTTP 500 HTML' => [500, 'text/html; charset=UTF-8', '<html>failure</html>'],
     'HTTP 500 empty SOAP body' => [500, 'application/soap+xml', ''],
     'HTTP 401 without SOAP' => [401, 'text/plain', 'Unauthorized'],
@@ -161,6 +172,7 @@ it('classifies completed HTTP failures without a SOAP fault as transport failure
 it('classifies malformed SOAP on a completed HTTP 500 exchange as a protocol failure', function (): void {
     $response = (new NativeSoapTransport(
         apiKey: 'APIKEYSENTINEL123456',
+        requestLimiter: new UnlimitedBirRequestLimiter,
         environment: Environment::Sandbox,
         httpSender: new NativeTransportCompletedExchangeSender(
             '<not-soap/>',
@@ -177,6 +189,7 @@ it('classifies malformed SOAP on a completed HTTP 500 exchange as a protocol fai
 it('rejects a successful SOAP operation carried by HTTP 500', function (): void {
     $response = (new NativeSoapTransport(
         apiKey: 'APIKEYSENTINEL123456',
+        requestLimiter: new UnlimitedBirRequestLimiter,
         environment: Environment::Sandbox,
         httpSender: new NativeTransportCompletedExchangeSender(
             nativeTransportHttpFixture('soap/login-success.xml'),

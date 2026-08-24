@@ -171,16 +171,17 @@ coordinates every caller using the key. Otherwise it removes local protection.
 
 ## Direct and custom transports
 
-`NativeSoapTransport` constructed directly defaults to
-`UnlimitedBirRequestLimiter`; the cache-backed default is supplied by the
-Laravel service provider. Standalone users must pass a
-`BirRequestLimiterInterface` implementation explicitly if they need local
-coordination.
+`NativeSoapTransport` constructed directly requires an explicit
+`BirRequestLimiterInterface`; the cache-backed default is supplied only by the
+Laravel service provider. Use `UnlimitedBirRequestLimiter` only as a conscious
+opt-out when another layer coordinates every caller using the credential.
 
 A replacement `BirGatewayInterface` or `BirSoapTransportInterface` owns its
 outbound calls and therefore also owns rate limiting. Use
 `UnlimitedBirRequestLimiter` or a recording fake in isolated tests where no
 network call is possible, and inject a rejecting fake when testing backoff
-behavior.
+behavior. Custom limiter implementations must repeat `#[\SensitiveParameter]`
+on parameter arrays that can carry search identifiers; interface parameter
+attributes are not inherited.
 
 Continue with [Service status, diagnostics, and logout](service-status-and-diagnostics.md).

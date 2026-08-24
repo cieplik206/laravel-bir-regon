@@ -10,7 +10,7 @@ use Spatie\LaravelData\Data;
 final class RegistryData extends Data
 {
     public function __construct(
-        public ?string $number,
+        #[\SensitiveParameter] public ?string $number,
         public ?DateTimeImmutable $enteredAt,
         public ?DateTimeImmutable $removedAt,
         public ?CodeNameData $authority,

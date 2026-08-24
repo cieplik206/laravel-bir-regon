@@ -9,5 +9,8 @@ use cieplik206\BirRegon\Protocol\BirOperation;
 interface BirRequestLimiterInterface
 {
     /** @param array<string, mixed> $parameters */
-    public function acquire(BirOperation $operation, array $parameters = []): void;
+    public function acquire(
+        BirOperation $operation,
+        #[\SensitiveParameter] array $parameters = [],
+    ): void;
 }

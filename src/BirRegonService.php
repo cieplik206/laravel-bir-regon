@@ -45,17 +45,17 @@ class BirRegonService
         return $this->sandboxService ??= new self($sandboxClient, $sandboxClient);
     }
 
-    public function forNip(string $nip): BirSearchBuilder
+    public function forNip(#[\SensitiveParameter] string $nip): BirSearchBuilder
     {
         return new BirSearchBuilder($this->getClient(), $nip, BirSearchBuilder::TYPE_NIP);
     }
 
-    public function forRegon(string $regon): BirSearchBuilder
+    public function forRegon(#[\SensitiveParameter] string $regon): BirSearchBuilder
     {
         return new BirSearchBuilder($this->getClient(), $regon, BirSearchBuilder::TYPE_REGON);
     }
 
-    public function forKrs(string $krs): BirSearchBuilder
+    public function forKrs(#[\SensitiveParameter] string $krs): BirSearchBuilder
     {
         return new BirSearchBuilder($this->getClient(), $krs, BirSearchBuilder::TYPE_KRS);
     }
@@ -63,7 +63,7 @@ class BirRegonService
     /**
      * @param  array<int, string>  $nips
      */
-    public function forNips(array $nips): BirBatchSearchBuilder
+    public function forNips(#[\SensitiveParameter] array $nips): BirBatchSearchBuilder
     {
         return new BirBatchSearchBuilder($this->getClient(), $nips, BirBatchSearchBuilder::TYPE_NIPS);
     }
@@ -71,7 +71,7 @@ class BirRegonService
     /**
      * @param  array<int, string>  $krsNumbers
      */
-    public function forKrsNumbers(array $krsNumbers): BirBatchSearchBuilder
+    public function forKrsNumbers(#[\SensitiveParameter] array $krsNumbers): BirBatchSearchBuilder
     {
         return new BirBatchSearchBuilder(
             $this->getClient(),
@@ -83,7 +83,7 @@ class BirRegonService
     /**
      * @param  array<int, string>  $regons
      */
-    public function forRegons9(array $regons): BirBatchSearchBuilder
+    public function forRegons9(#[\SensitiveParameter] array $regons): BirBatchSearchBuilder
     {
         return new BirBatchSearchBuilder($this->getClient(), $regons, BirBatchSearchBuilder::TYPE_REGONS_9);
     }
@@ -91,7 +91,7 @@ class BirRegonService
     /**
      * @param  array<int, string>  $regons
      */
-    public function forRegons14(array $regons): BirBatchSearchBuilder
+    public function forRegons14(#[\SensitiveParameter] array $regons): BirBatchSearchBuilder
     {
         return new BirBatchSearchBuilder($this->getClient(), $regons, BirBatchSearchBuilder::TYPE_REGONS_14);
     }

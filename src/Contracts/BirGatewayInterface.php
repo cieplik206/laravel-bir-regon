@@ -15,10 +15,13 @@ use DateTimeImmutable;
 interface BirGatewayInterface
 {
     /** @return list<SearchResult> */
-    public function search(SearchCriteria $criteria): array;
+    public function search(#[\SensitiveParameter] SearchCriteria $criteria): array;
 
     /** @return list<array<string, string>> */
-    public function fullReport(string $regon, ReportType $reportType): array;
+    public function fullReport(
+        #[\SensitiveParameter] string $regon,
+        ReportType $reportType,
+    ): array;
 
     /** @return list<string> */
     public function bulkReport(DateTimeImmutable $date, BulkReportType $reportType): array;

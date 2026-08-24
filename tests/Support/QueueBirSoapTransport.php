@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace cieplik206\BirRegon\Tests\Support;
 
+use cieplik206\BirRegon\Contracts\BirEnvironmentAwareTransportInterface;
 use cieplik206\BirRegon\Contracts\BirSoapTransportInterface;
+use cieplik206\BirRegon\Enums\Environment;
 use cieplik206\BirRegon\Protocol\BirOperation;
 use cieplik206\BirRegon\Protocol\TransportResponse;
 use LogicException;
 use Throwable;
 
-final class QueueBirSoapTransport implements BirSoapTransportInterface
+final class QueueBirSoapTransport implements BirEnvironmentAwareTransportInterface, BirSoapTransportInterface
 {
     /** @var list<array{BirOperation, array<string, mixed>, ?string}> */
     public array $calls = [];
@@ -25,7 +27,10 @@ final class QueueBirSoapTransport implements BirSoapTransportInterface
 
     private ?string $sessionId = null;
 
-    public function __construct(private bool $authenticationConfigured = true) {}
+    public function __construct(
+        private bool $authenticationConfigured = true,
+        private readonly Environment $environment = Environment::Production,
+    ) {}
 
     public function setAuthenticationConfigured(bool $configured): self
     {
@@ -48,14 +53,21 @@ final class QueueBirSoapTransport implements BirSoapTransportInterface
         return $this->authenticationConfigured;
     }
 
+    public function environment(): Environment
+    {
+        return $this->environment;
+    }
+
     public function useSession(#[\SensitiveParameter] ?string $sessionId): void
     {
         $this->sessionId = $sessionId;
         $this->sessionIds[] = $sessionId;
     }
 
-    public function call(BirOperation $operation, array $parameters = []): TransportResponse
-    {
+    public function call(
+        BirOperation $operation,
+        #[\SensitiveParameter] array $parameters = [],
+    ): TransportResponse {
         $this->calls[] = [
             $operation,
             $this->redactSensitiveParameters($parameters),

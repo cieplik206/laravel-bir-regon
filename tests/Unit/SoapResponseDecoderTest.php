@@ -80,7 +80,7 @@ it('decodes plain SOAP response fixtures', function (
         ->and($response->resultWasNil)->toBeFalse()
         ->and($response->result())->toContain($expectedResult);
 })->with([
-    'login' => [BirOperation::Login, 'soap/login-success.xml', 'fixture-session-0001'],
+    'login' => [BirOperation::Login, 'soap/login-success.xml', 'fixtureSession000001'],
     'GetValue' => [BirOperation::GetValue, 'soap/get-value-active.xml', '1'],
     'search' => [BirOperation::Search, 'soap/search.xml', '<Regon>012345678</Regon>'],
     'full report' => [BirOperation::FullReport, 'soap/full.xml', '<praw_regon9>012345678</praw_regon9>'],
@@ -94,7 +94,7 @@ it('decodes plain SOAP without depending on an XML declaration', function (): vo
     $response = (new SoapResponseDecoder)->decode((string) $fixture, BirOperation::Login);
 
     expect($response->successful)->toBeTrue()
-        ->and($response->result())->toBe('fixture-session-0001');
+        ->and($response->result())->toBe('fixtureSession000001');
 });
 
 it('decodes plain SOAP with a UTF-8 byte order mark', function (): void {
@@ -104,7 +104,7 @@ it('decodes plain SOAP with a UTF-8 byte order mark', function (): void {
     );
 
     expect($response->successful)->toBeTrue()
-        ->and($response->result())->toBe('fixture-session-0001');
+        ->and($response->result())->toBe('fixtureSession000001');
 });
 
 it('decodes plain SOAP with a legal comment before the Envelope', function (): void {
@@ -117,7 +117,7 @@ it('decodes plain SOAP with a legal comment before the Envelope', function (): v
     );
 
     expect($response->successful)->toBeTrue()
-        ->and($response->result())->toBe('fixture-session-0001');
+        ->and($response->result())->toBe('fixtureSession000001');
 });
 
 it('distinguishes an empty result from an xsi nil result', function (): void {
@@ -243,7 +243,7 @@ it('extracts the SOAP root from a standard MIME response body', function (): voi
     );
 
     expect($response->successful)->toBeTrue()
-        ->and($response->result())->toBe('fixture-session-0001');
+        ->and($response->result())->toBe('fixtureSession000001');
 });
 
 it('decodes the historically indented single-part MIME framing used by GUS', function (
@@ -266,7 +266,7 @@ it('decodes the historically indented single-part MIME framing used by GUS', fun
     );
 
     expect($response->successful)->toBeTrue()
-        ->and($response->result())->toBe('fixture-session-0001');
+        ->and($response->result())->toBe('fixtureSession000001');
 })->with([
     'inferred boundary' => [null],
     'HTTP content type' => [
@@ -317,7 +317,7 @@ it('uses the MIME start parameter to select a non-first SOAP root', function ():
     );
 
     expect($response->successful)->toBeTrue()
-        ->and($response->result())->toBe('fixture-session-0001');
+        ->and($response->result())->toBe('fixtureSession000001');
 });
 
 it('accepts every RFC 2046 boundary character allowed in a quoted parameter', function (
@@ -336,7 +336,7 @@ it('accepts every RFC 2046 boundary character allowed in a quoted parameter', fu
     );
 
     expect($response->successful)->toBeTrue()
-        ->and($response->result())->toBe('fixture-session-0001');
+        ->and($response->result())->toBe('fixtureSession000001');
 })->with([
     'slash' => ['safe/boundary'],
     'internal space' => ['safe boundary'],
@@ -411,7 +411,7 @@ it('accepts irrelevant MIME extension headers with every legal token character',
     $response = (new SoapResponseDecoder)->decode($mime, BirOperation::Login);
 
     expect($response->successful)->toBeTrue()
-        ->and($response->result())->toBe('fixture-session-0001');
+        ->and($response->result())->toBe('fixtureSession000001');
 })->with([
     'underscore' => ['X_Test'],
     'punctuation' => ['X!Trace~Value'],
@@ -511,12 +511,12 @@ it('accepts top-level XOP when it explicitly declares a SOAP media type', functi
     );
 
     expect($response->successful)->toBeTrue()
-        ->and($response->result())->toBe('fixture-session-0001');
+        ->and($response->result())->toBe('fixtureSession000001');
 });
 
 it('rejects a response with a missing result element', function (): void {
     $xml = str_replace(
-        '<ZalogujResult>fixture-session-0001</ZalogujResult>',
+        '<ZalogujResult>fixtureSession000001</ZalogujResult>',
         '',
         soapFixture('soap/login-success.xml'),
     );
@@ -579,7 +579,7 @@ it('rejects DOCTYPE and XOP include responses', function (): void {
         soapFixture('soap/login-success.xml'),
     );
     $xop = str_replace(
-        '<ZalogujResult>fixture-session-0001</ZalogujResult>',
+        '<ZalogujResult>fixtureSession000001</ZalogujResult>',
         '<ZalogujResult><xop:Include xmlns:xop="http://www.w3.org/2004/08/xop/include" href="cid:secret" /></ZalogujResult>',
         soapFixture('soap/login-success.xml'),
     );

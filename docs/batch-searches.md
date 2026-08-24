@@ -71,6 +71,10 @@ $companies = BirRegon::sandbox()
     ->get();
 ```
 
+The sandbox dataset may be stale, incomplete, artificial, or anonymized. Use
+batch results there to test integration behavior, not as evidence of the
+current production registry state.
+
 ## Empty and oversized batches
 
 An empty identifier array returns an empty collection without sending a

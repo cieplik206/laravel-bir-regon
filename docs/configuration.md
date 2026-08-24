@@ -19,6 +19,9 @@ BIR_REQUEST_TIMEOUT=30
 BIR_MAX_RESPONSE_BYTES=10000000
 BIR_USER_AGENT=laravel-bir-regon/2
 BIR_IDENTIFIER_VALIDATION=format
+BIR_PROXY_URL=https://proxy.example.com:8443
+BIR_PROXY_USERNAME=proxy-user
+BIR_PROXY_PASSWORD=proxy-password
 BIR_RATE_LIMIT_ENABLED=true
 BIR_RATE_LIMIT_STORE=redis
 BIR_RATE_LIMIT_PREFIX=bir-regon:rate-limit
@@ -28,11 +31,14 @@ BIR_RATE_LIMIT_PREFIX=bir-regon:rate-limit
 | --- | --- | --- | --- |
 | `BIR_API_KEY` | Exactly 20 ASCII letters or digits | Empty | Authenticates searches and reports |
 | `BIR_SANDBOX_API_KEY` | Exactly 20 ASCII letters or digits | Public GUS sandbox key | Authenticates sandbox requests |
-| `BIR_CONNECTION_TIMEOUT` | Positive integer, in seconds | `10` | Limits connection establishment time |
-| `BIR_REQUEST_TIMEOUT` | Positive integer, in seconds | `30` | Limits a complete SOAP request |
-| `BIR_MAX_RESPONSE_BYTES` | Positive integer, in bytes | `10000000` | Bounds streamed HTTP bodies, SOAP/MIME payloads, and nested report XML |
+| `BIR_CONNECTION_TIMEOUT` | Integer `1..60`, in seconds | `10` | Limits connection establishment time |
+| `BIR_REQUEST_TIMEOUT` | Integer `1..300`, in seconds | `30` | Limits a complete SOAP request |
+| `BIR_MAX_RESPONSE_BYTES` | Integer `1..50000000`, in bytes | `10000000` | Bounds streamed HTTP bodies, SOAP/MIME payloads, and nested report XML |
 | `BIR_USER_AGENT` | 1-200 printable ASCII characters | `laravel-bir-regon/2` | Identifies the package transport to GUS |
 | `BIR_IDENTIFIER_VALIDATION` | `format` or `checksum` | `format` | Selects local NIP and REGON validation before gateway access |
+| `BIR_PROXY_URL` | `http://` or `https://` URL containing only a host and optional port | Empty | Routes production and sandbox HTTPS traffic through an explicit proxy |
+| `BIR_PROXY_USERNAME` | String without surrounding whitespace or control characters | Empty | Authenticates to the explicit proxy |
+| `BIR_PROXY_PASSWORD` | String without surrounding whitespace or control characters | Empty | Authenticates to the explicit proxy |
 | `BIR_RATE_LIMIT_ENABLED` | Laravel boolean | `true` | Enables shared cache-backed request limiting |
 | `BIR_RATE_LIMIT_STORE` | A configured Laravel cache store name | Default cache store | Selects the limiter state and lock backend |
 | `BIR_RATE_LIMIT_PREFIX` | 1-100 ASCII letters, digits, `:`, `_`, or `-` | `bir-regon:rate-limit` | Namespaces limiter cache entries |
@@ -42,8 +48,9 @@ in a database or another persistent store, encrypt them at rest.
 
 An empty production key still allows the unauthenticated public service-status
 operation. Other authenticated operations reject an empty or malformed key
-before opening a network connection. An invalid `BIR_USER_AGENT` value is
-replaced with the package default.
+before opening a network connection and identify `BIR_API_KEY` or
+`BIR_SANDBOX_API_KEY` according to the selected native environment. An invalid
+`BIR_USER_AGENT` value is replaced with the package default.
 
 ## Published configuration
 
@@ -55,11 +62,16 @@ The complete configuration file contains two isolated credentials:
 return [
     'api_key' => env('BIR_API_KEY', ''),
     'sandbox_api_key' => env('BIR_SANDBOX_API_KEY', 'abcde12345abcde12345'),
-    'connection_timeout' => (int) env('BIR_CONNECTION_TIMEOUT', 10),
-    'request_timeout' => (int) env('BIR_REQUEST_TIMEOUT', 30),
-    'max_response_bytes' => (int) env('BIR_MAX_RESPONSE_BYTES', 10_000_000),
+    'connection_timeout' => env('BIR_CONNECTION_TIMEOUT', 10),
+    'request_timeout' => env('BIR_REQUEST_TIMEOUT', 30),
+    'max_response_bytes' => env('BIR_MAX_RESPONSE_BYTES', 10_000_000),
     'user_agent' => env('BIR_USER_AGENT', 'laravel-bir-regon/2'),
     'identifier_validation' => env('BIR_IDENTIFIER_VALIDATION', 'format'),
+    'proxy' => [
+        'url' => env('BIR_PROXY_URL'),
+        'username' => env('BIR_PROXY_USERNAME'),
+        'password' => env('BIR_PROXY_PASSWORD'),
+    ],
     'rate_limit' => [
         'enabled' => (bool) env('BIR_RATE_LIMIT_ENABLED', true),
         'store' => env('BIR_RATE_LIMIT_STORE'),
@@ -70,12 +82,15 @@ return [
 
 The package merges these defaults with the application's configuration, so a
 published file only needs to override values that differ from the defaults.
-Connection and request timeouts are clamped to at least one second by the
-native transport. The request timeout is a deadline for the complete cURL
-exchange, not only socket inactivity. Keep the response limit large enough for
-the full or bulk reports used by the application, but avoid disabling it with
-an unbounded value. The same byte limit applies while streaming the outer HTTP
-body and again when decoding the nested report XML.
+Numeric transport settings accept only an integer or a canonical decimal
+integer string. Floats, booleans, arrays, leading or trailing whitespace, and
+values outside `1..60` connection seconds, `1..300` request seconds, or
+`1..50000000` response bytes fail closed when the client is resolved. The
+request timeout is a deadline for the complete cURL exchange, not only socket
+inactivity. The same byte limit applies while streaming the outer HTTP body and
+again when decoding the nested report XML. Direct `NativeSoapTransport`
+construction enforces the same ranges and rejects invalid values with
+`InvalidArgumentException`.
 
 ## Identifier validation
 
@@ -97,6 +112,51 @@ leading zeroes. It does not strip a `PL` prefix, whitespace, or dashes. Perform
 UI-specific normalization before calling the package. Any configuration value
 other than the exact strings `format` or `checksum`, including a non-string
 value, fails closed with `LogicException` when the client is resolved.
+
+## HTTP proxy
+
+Leave `BIR_PROXY_URL`, `BIR_PROXY_USERNAME`, and `BIR_PROXY_PASSWORD` empty to
+disable the package's explicit proxy configuration. In that state the native
+sender does not override libcurl's ambient proxy discovery, so process-level
+variables such as `HTTPS_PROXY` and `NO_PROXY` retain their normal libcurl
+meaning.
+
+Set `BIR_PROXY_URL` to an `http` or `https` URL containing only the scheme,
+host, and optional port, for example `http://proxy.internal:8080` or
+`https://proxy.example.com:8443`. User information, a path other than `/`, a
+query, a fragment, whitespace, and control characters are rejected. Do not put
+credentials in URL userinfo. Configure them separately:
+
+```dotenv
+BIR_PROXY_URL=https://proxy.example.com:8443
+BIR_PROXY_USERNAME=proxy-user
+BIR_PROXY_PASSWORD=proxy-password
+```
+
+The username and password must be configured together. Empty credentials mean
+an unauthenticated proxy. Proxy configuration applies equally to the isolated
+production and sandbox native transports. The sender forces an HTTP CONNECT
+tunnel and explicit routing, so an ambient `NO_PROXY` value does not bypass an
+explicit `BIR_PROXY_URL`.
+
+Prefer an `https://` proxy whenever credentials are configured. The TLS
+connection to GUS inside the CONNECT tunnel protects the SOAP exchange, but it
+does not add TLS to the client-to-proxy link itself. With an `http://` proxy
+that link is unencrypted, and a proxy that selects Basic authentication can
+receive the credentials without transport encryption.
+
+TLS peer and hostname verification remains enabled for the GUS target, with
+TLS 1.2 as the minimum protocol version. When the proxy URL uses `https`, its
+TLS connection is also verified and requires TLS 1.2 or newer. The package does
+not provide a switch to disable either check. Proxy configuration and
+credentials are treated as sensitive state and are omitted from debug,
+serialized, and translated exception data. Keep all three variables outside
+source control and rebuild Laravel's configuration cache after changing them.
+
+An explicit proxy cannot be combined with a custom HTTP sender passed to
+`NativeSoapTransport`; that combination fails closed instead of silently
+choosing one route. A replacement `BirSoapTransportInterface` owns all of its
+network and proxy behavior. See [Extending the package](extending.md#replacing-only-the-soap-transport).
 
 ## Request limiting
 
@@ -144,6 +204,11 @@ $sandboxCompanies = BirRegon::sandbox()
 `sandbox()` returns a service backed by a dedicated native GUS test transport.
 The production and sandbox clients keep separate credentials and sessions for
 the current Laravel container scope.
+
+The sandbox dataset is separate from production and changes independently. It
+may be outdated, incomplete, artificial, or anonymized. Use it to verify the
+integration contract and failure handling, not to decide whether an entity
+currently exists or what its production data contains.
 
 Keep the scoped service when several operations belong to one sandbox workflow:
 

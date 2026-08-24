@@ -4,6 +4,13 @@ A fluent Laravel client for the Polish GUS BIR/REGON SOAP API.
 
 **[Read the full documentation →](https://cieplik206.github.io/laravel-bir-regon/)**
 
+> [!IMPORTANT]
+> This branch documents the unreleased 2.x development line. The latest
+> published and supported stable line is 1.1.x. Until 2.0.0 is released, the
+> 2.x requirements and API below are not the API installed by an unqualified
+> `composer require` command. Production users should follow the
+> [documentation shipped with v1.1.1](https://github.com/cieplik206/laravel-bir-regon/tree/v1.1.1#readme).
+
 Use a Laravel facade or dependency injection to search businesses by NIP,
 REGON, or KRS, retrieve full and bulk reports, and inspect the current GUS
 service status. Search items and report payloads are returned as typed
@@ -25,15 +32,17 @@ foreach ($companies as $company) {
 - Fluent searches by NIP, REGON, and KRS without discarding additional GUS
   silo results
 - Batch searches for up to 20 identifiers
-- Native bounded cURL transport with SOAP 1.2 and WS-Addressing for the official
-  GUS BIR 1.2 API
+- Native bounded cURL transport with SOAP 1.2, WS-Addressing, TLS 1.2 or newer,
+  and strict timeout and response-size limits for the official GUS BIR 1.2 API
+- Optional explicit HTTP or HTTPS proxy routing with CONNECT tunneling and
+  verified TLS
 - All 17 full report types, including BIR121, and all 6 bulk report types
 - Separate production and sandbox clients with reusable sessions and HTTP
   connections
 - Strict response enums and normalized full-report DTOs, with the original GUS
   rows retained
 - Cache-backed enforcement of the official GUS request limits
-- Credential-safe translation of GUS and transport exceptions
+- Identifier- and credential-safe translation of GUS and transport exceptions
 - Credential-free serialization tombstones for clients and request builders
 - Laravel auto-discovery, facade, and container bindings
 - Isolated tests plus an opt-in live sandbox suite
@@ -52,10 +61,24 @@ or Laravel 12 should remain on the 1.x package line.
 
 ## Installation
 
-Install the package via Composer:
+For the currently published stable line, use:
 
 ```bash
-composer require cieplik206/laravel-bir-regon
+composer require cieplik206/laravel-bir-regon:^1.1
+```
+
+After 2.0.0 is published, install the version documented on this branch with:
+
+```bash
+composer require cieplik206/laravel-bir-regon:^2.0
+```
+
+Maintainers testing the unreleased 2.x code after it is merged to `main` may
+explicitly require `dev-main`; do not use a development branch as a production
+dependency.
+
+```bash
+composer require cieplik206/laravel-bir-regon:dev-main --with-all-dependencies
 ```
 
 Add your BIR API key to `.env`:
@@ -78,6 +101,26 @@ when GUS provides a different test key:
 BIR_SANDBOX_API_KEY=your-test-key
 ```
 
+The sandbox uses a separate, mutable test dataset. Its records may lag
+production and may be incomplete, artificial, or anonymized. A missing or
+different sandbox result does not establish the current production registry
+state.
+
+Corporate networks may route both production and sandbox traffic through an
+explicit proxy:
+
+```dotenv
+BIR_PROXY_URL=https://proxy.example.com:8443
+BIR_PROXY_USERNAME=proxy-user
+BIR_PROXY_PASSWORD=proxy-password
+```
+
+Proxy credentials are optional, but the username and password must be set
+together. Prefer an `https://` proxy whenever credentials are configured; an
+`http://` proxy link is not protected by TLS. See the
+[configuration guide](https://cieplik206.github.io/laravel-bir-regon/configuration.html#http-proxy)
+for validation, TLS, and ambient proxy behavior.
+
 Laravel discovers the package service provider automatically. You may
 optionally publish the configuration file:
 
@@ -89,7 +132,8 @@ Version 2 is intentionally breaking: singular identifier searches now return
 collections, closed GUS fields use strict enums, full reports include a typed
 normalized DTO alongside their raw rows, and Laravel enables a shared-cache
 request limiter by default. Direct `BirClient` construction and the old
-GusApi-specific extension points also changed. See
+GusApi-specific extension points also changed, and direct
+`NativeSoapTransport` construction requires an explicit request limiter. See
 [UPGRADE-2.0.md](UPGRADE-2.0.md) before upgrading from 1.x.
 
 See the
@@ -155,6 +199,11 @@ KRS has no checksum algorithm and remains a strict 10-digit format check in
 both modes. A valid checksum does not prove that an identifier exists or that
 an entity is active. The client accepts undecorated digit strings and does not
 remove `PL`, spaces, or dashes.
+
+Package exceptions do not repeat NIP, REGON, or KRS values in their messages,
+public properties, or native stack-trace arguments. Log the identifier only
+when the application's own data-protection policy allows it, and pass it as
+structured context rather than rebuilding an exception message.
 
 Production is the default. Select the isolated GUS test client before building
 a sandbox request:

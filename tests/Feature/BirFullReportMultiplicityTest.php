@@ -75,10 +75,33 @@ it('requests a full report for every compatible result', function (
     ],
 ]);
 
+it('requests the general natural-person report for a historical silo result', function (): void {
+    $result = makeFullReportMultiplicitySearchResult(
+        regon: '771504670',
+        silo: Silo::DeletedBefore20141108,
+        name: 'Historical activity',
+    );
+    $reportData = [[
+        'fiz_regon9' => '771504670',
+        'fiz_dzialalnoscSkreslonaDo20141108' => '1',
+    ]];
+    $gateway = (new FakeBirGateway(searchResults: [$result]))
+        ->queueFullReport($reportData);
+    $client = new BirClient($gateway);
+
+    $report = $client->getFullReport('771504670', ReportType::NaturalPerson);
+
+    expect($report->basicData->regon)->toBe('771504670')
+        ->and($report->reportData)->toBe($reportData)
+        ->and($gateway->calls)->toEqual([
+            ['search', SearchCriteria::regon('771504670')],
+            ['fullReport', '771504670', ReportType::NaturalPerson],
+        ]);
+});
+
 it('rejects ambiguous singular full reports without making a report request', function (
     Closure $operation,
     SearchCriteria $criteria,
-    string $identifier,
     string $identifierType,
 ): void {
     $gateway = new FakeBirGateway(searchResults: [
@@ -95,9 +118,13 @@ it('rejects ambiguous singular full reports without making a report request', fu
     }
 
     expect($exception)->toBeInstanceOf(BirAmbiguousResultException::class)
-        ->and($exception->identifier)->toBe($identifier)
         ->and($exception->identifierType)->toBe($identifierType)
         ->and($exception->compatibleTargetCount)->toBe(2)
+        ->and(array_key_exists('identifier', get_object_vars($exception)))->toBeFalse()
+        ->and($exception->getMessage())->toBe(sprintf(
+            'GUS BIR returned 2 distinct compatible report targets for the %s identifier. Use the plural full-report method to retrieve every result.',
+            $identifierType,
+        ))
         ->and($gateway->calls)->toEqual([
             ['search', $criteria],
         ]);
@@ -108,7 +135,6 @@ it('rejects ambiguous singular full reports without making a report request', fu
             ReportType::NaturalPerson,
         ),
         SearchCriteria::nip('1234567890'),
-        '1234567890',
         'NIP',
     ],
     'KRS' => [
@@ -117,7 +143,6 @@ it('rejects ambiguous singular full reports without making a report request', fu
             ReportType::NaturalPerson,
         ),
         SearchCriteria::krs('0000123456'),
-        '0000123456',
         'KRS',
     ],
     'REGON' => [
@@ -126,7 +151,6 @@ it('rejects ambiguous singular full reports without making a report request', fu
             ReportType::NaturalPerson,
         ),
         SearchCriteria::regon('123456789'),
-        '123456789',
         'REGON',
     ],
 ]);

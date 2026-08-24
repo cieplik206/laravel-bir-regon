@@ -26,7 +26,7 @@ interface BirClientInterface
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function searchByNip(string $nip): array;
+    public function searchByNip(#[\SensitiveParameter] string $nip): array;
 
     /**
      * @return list<CompanyData>
@@ -35,7 +35,7 @@ interface BirClientInterface
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function searchByRegon(string $regon): array;
+    public function searchByRegon(#[\SensitiveParameter] string $regon): array;
 
     /**
      * @return list<CompanyData>
@@ -44,7 +44,7 @@ interface BirClientInterface
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function searchByKrs(string $krs): array;
+    public function searchByKrs(#[\SensitiveParameter] string $krs): array;
 
     /**
      * @param  array<int, string>  $nips
@@ -54,7 +54,7 @@ interface BirClientInterface
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function searchByNips(array $nips): array;
+    public function searchByNips(#[\SensitiveParameter] array $nips): array;
 
     /**
      * @param  array<int, string>  $krsNumbers
@@ -64,7 +64,7 @@ interface BirClientInterface
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function searchByKrsNumbers(array $krsNumbers): array;
+    public function searchByKrsNumbers(#[\SensitiveParameter] array $krsNumbers): array;
 
     /**
      * @param  array<int, string>  $regons
@@ -74,7 +74,7 @@ interface BirClientInterface
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function searchByRegons9(array $regons): array;
+    public function searchByRegons9(#[\SensitiveParameter] array $regons): array;
 
     /**
      * @param  array<int, string>  $regons
@@ -84,7 +84,7 @@ interface BirClientInterface
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function searchByRegons14(array $regons): array;
+    public function searchByRegons14(#[\SensitiveParameter] array $regons): array;
 
     /**
      * @return list<FullCompanyReportData>
@@ -93,7 +93,7 @@ interface BirClientInterface
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function getFullReportsByNip(string $nip, ReportType $reportType): array;
+    public function getFullReportsByNip(#[\SensitiveParameter] string $nip, ReportType $reportType): array;
 
     /**
      * @return list<FullCompanyReportData>
@@ -102,7 +102,7 @@ interface BirClientInterface
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function getFullReportsByKrs(string $krs, ReportType $reportType): array;
+    public function getFullReportsByKrs(#[\SensitiveParameter] string $krs, ReportType $reportType): array;
 
     /**
      * @return list<FullCompanyReportData>
@@ -111,7 +111,7 @@ interface BirClientInterface
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function getFullReports(string $regon, ReportType $reportType): array;
+    public function getFullReports(#[\SensitiveParameter] string $regon, ReportType $reportType): array;
 
     /**
      * @throws BirAmbiguousResultException
@@ -119,7 +119,7 @@ interface BirClientInterface
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function getFullReportByNip(string $nip, ReportType $reportType): FullCompanyReportData;
+    public function getFullReportByNip(#[\SensitiveParameter] string $nip, ReportType $reportType): FullCompanyReportData;
 
     /**
      * @throws BirAmbiguousResultException
@@ -127,7 +127,7 @@ interface BirClientInterface
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function getFullReportByKrs(string $krs, ReportType $reportType): FullCompanyReportData;
+    public function getFullReportByKrs(#[\SensitiveParameter] string $krs, ReportType $reportType): FullCompanyReportData;
 
     /**
      * @throws BirAmbiguousResultException
@@ -135,7 +135,7 @@ interface BirClientInterface
      * @throws BirAuthenticationException
      * @throws BirException
      */
-    public function getFullReport(string $regon, ReportType $reportType): FullCompanyReportData;
+    public function getFullReport(#[\SensitiveParameter] string $regon, ReportType $reportType): FullCompanyReportData;
 
     /**
      * @throws BirAuthenticationException

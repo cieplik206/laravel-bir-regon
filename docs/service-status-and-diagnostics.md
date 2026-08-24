@@ -93,6 +93,17 @@ message, and session status. A cold client also logs in first. If local request
 limiting interrupts any step, `BirRateLimitException` is propagated and no
 partial snapshot is returned.
 
+When the completed status and message-code pair authoritatively identifies an
+expired session, the gateway discards all three first-attempt responses and
+repeats the complete public snapshot once. Otherwise, a failed diagnostic call
+is propagated as its actual `BirTransportException`,
+`BirSoapFaultException`, or `BirProtocolException` instead of being replaced
+with a generic incomplete-diagnostics error. No partial snapshot is returned.
+
+The internal status-and-message-code diagnostics used after an ambiguously
+empty search, report, or scalar response are stricter: either typed failure is
+propagated, and a partial pair never triggers session renewal.
+
 Diagnostics require an API key and are tied to the current client session. Keep
 the sandbox service when a failed request and its diagnostics belong together:
 

@@ -9,6 +9,7 @@ use cieplik206\BirRegon\Facades\BirRegon;
 const SANDBOX_NIP = '7740001454';
 const SANDBOX_REGON = '610188201';
 const SANDBOX_KRS = '0000028860';
+const SANDBOX_HISTORICAL_NATURAL_PERSON_REGON = '771504670';
 
 beforeEach(function (): void {
     config()->set('bir-regon.sandbox_api_key', sandboxApiKey());
@@ -52,6 +53,19 @@ it('fetches a full company report from the GUS sandbox', function (): void {
     expect($report->basicData->regon)->toBe(SANDBOX_REGON)
         ->and($report->reportData)->not->toBeEmpty()
         ->and($report->reportData[0]['praw_regon9'])->toBe(SANDBOX_REGON);
+})->group('sandbox');
+
+it('fetches the general natural-person report for a historical sandbox record', function (): void {
+    $report = BirRegon::sandbox()
+        ->forRegon(SANDBOX_HISTORICAL_NATURAL_PERSON_REGON)
+        ->reportType(ReportType::NaturalPerson)
+        ->getFullReport();
+
+    expect($report->basicData->regon)->toBe(SANDBOX_HISTORICAL_NATURAL_PERSON_REGON)
+        ->and($report->basicData->silo->value)->toBe(4)
+        ->and($report->reportData)->not->toBeEmpty()
+        ->and($report->reportData[0]['fiz_regon9'])
+        ->toBe(SANDBOX_HISTORICAL_NATURAL_PERSON_REGON);
 })->group('sandbox');
 
 it('reads diagnostics after an unsuccessful sandbox search', function (): void {

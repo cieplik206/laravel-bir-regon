@@ -10,6 +10,7 @@ use cieplik206\BirRegon\Contracts\BirGatewayInterface;
 use cieplik206\BirRegon\Contracts\BirSoapTransportInterface;
 use cieplik206\BirRegon\Enums\Environment;
 use cieplik206\BirRegon\Enums\IdentifierValidationMode;
+use cieplik206\BirRegon\Exceptions\BirAuthenticationException;
 use cieplik206\BirRegon\Exceptions\BirValidationException;
 use cieplik206\BirRegon\Facades\BirRegon as BirRegonFacade;
 use cieplik206\BirRegon\Gateway\NativeBirGateway;
@@ -32,6 +33,11 @@ it('merges the complete default package configuration', function (): void {
             'max_response_bytes' => 10_000_000,
             'user_agent' => 'laravel-bir-regon/2',
             'identifier_validation' => 'format',
+            'proxy' => [
+                'url' => null,
+                'username' => null,
+                'password' => null,
+            ],
             'rate_limit' => [
                 'enabled' => true,
                 'store' => null,
@@ -74,6 +80,38 @@ it('registers the native dependency graph as scoped services', function (): void
         ->and($container->make(BirRegonService::class))->not->toBe($service);
 });
 
+it('resolves production and sandbox clients without authenticating eagerly', function (): void {
+    config()->set('bir-regon.api_key', '');
+    config()->set('bir-regon.sandbox_api_key', '');
+
+    $service = app(BirRegonService::class);
+    $productionClient = providerTestProperty($service, 'client');
+    $sandboxClient = providerTestProperty($service, 'sandboxClient');
+
+    expect($productionClient)->toBeInstanceOf(BirClient::class)
+        ->and($sandboxClient)->toBeInstanceOf(BirClient::class);
+});
+
+it('names the selected environment variable when an API key is missing', function (
+    bool $sandbox,
+    string $environmentVariable,
+): void {
+    config()->set('bir-regon.api_key', '');
+    config()->set('bir-regon.sandbox_api_key', '');
+
+    $service = app(BirRegonService::class);
+    $selected = $sandbox ? $service->sandbox() : $service;
+
+    expect(fn () => $selected->forNip('0123456789')->get())
+        ->toThrow(
+            BirAuthenticationException::class,
+            'BIR API key is not configured. Set '.$environmentVariable.' in your .env file.',
+        );
+})->with([
+    'production' => [false, 'BIR_API_KEY'],
+    'sandbox' => [true, 'BIR_SANDBOX_API_KEY'],
+]);
+
 it('allows the Laravel cache-backed limiter to be disabled explicitly', function (): void {
     config()->set('bir-regon.rate_limit.enabled', false);
 
@@ -82,6 +120,121 @@ it('allows the Laravel cache-backed limiter to be disabled explicitly', function
     expect($transport)->toBeInstanceOf(NativeSoapTransport::class)
         ->and(providerTestProperty($transport, 'requestLimiter'))
         ->toBeInstanceOf(UnlimitedBirRequestLimiter::class);
+});
+
+it('passes one explicit HTTP proxy configuration to both native environments', function (): void {
+    $proxyUrl = 'https://proxy.example.test:8443';
+    $proxyUsername = 'proxy-user';
+    $proxyPassword = 'PROXY-PASSWORD-SENTINEL';
+    config()->set('bir-regon.proxy', [
+        'url' => $proxyUrl,
+        'username' => $proxyUsername,
+        'password' => $proxyPassword,
+    ]);
+
+    $productionTransport = app(BirSoapTransportInterface::class);
+    $service = app(BirRegonService::class);
+    $sandboxClient = providerTestProperty($service, 'sandboxClient');
+
+    if (! $productionTransport instanceof NativeSoapTransport || ! $sandboxClient instanceof BirClient) {
+        throw new LogicException('The provider did not construct both native environments.');
+    }
+
+    $sandboxGateway = providerTestProperty($sandboxClient, 'gateway');
+
+    if (! $sandboxGateway instanceof NativeBirGateway) {
+        throw new LogicException('The provider did not construct the sandbox gateway.');
+    }
+
+    $sandboxTransport = providerTestProperty($sandboxGateway, 'transport');
+
+    if (! $sandboxTransport instanceof NativeSoapTransport) {
+        throw new LogicException('The provider did not construct the sandbox transport.');
+    }
+
+    foreach ([$productionTransport, $sandboxTransport] as $transport) {
+        $sender = providerTestProperty($transport, 'httpSender');
+
+        if (! is_object($sender)) {
+            throw new LogicException('The native transport did not contain an HTTP sender.');
+        }
+
+        $proxy = providerTestProperty($sender, 'proxy');
+
+        if (! is_object($proxy)) {
+            throw new LogicException('The native HTTP sender did not contain proxy configuration.');
+        }
+
+        expect(providerTestProperty($proxy, 'url'))->toBe($proxyUrl)
+            ->and(providerTestProperty($proxy, 'username'))->toBe($proxyUsername)
+            ->and(providerTestProperty($proxy, 'password'))->toBe($proxyPassword);
+    }
+});
+
+it('fails closed for invalid explicit HTTP proxy configuration', function (
+    mixed $url,
+    mixed $username,
+    mixed $password,
+    string $message,
+): void {
+    config()->set('bir-regon.proxy', [
+        'url' => $url,
+        'username' => $username,
+        'password' => $password,
+    ]);
+
+    expect(fn () => app(BirSoapTransportInterface::class))
+        ->toThrow(LogicException::class, $message);
+})->with([
+    'credentials without URL' => [
+        null,
+        'proxy-user',
+        'proxy-password',
+        'BIR proxy credentials require a proxy URL.',
+    ],
+    'unsupported scheme' => [
+        'ftp://proxy.example.test:21',
+        null,
+        null,
+        'BIR proxy URL must use the http or https scheme.',
+    ],
+    'credentials embedded in URL' => [
+        'https://user:password@proxy.example.test:8443',
+        null,
+        null,
+        'BIR proxy credentials must use the separate username and password settings.',
+    ],
+    'incomplete credentials' => [
+        'https://proxy.example.test:8443',
+        'proxy-user',
+        null,
+        'BIR proxy username and password must be configured together.',
+    ],
+    'non-string URL' => [
+        ['https://proxy.example.test:8443'],
+        null,
+        null,
+        'BIR proxy URL must be a string or null.',
+    ],
+    'non-string username' => [
+        'https://proxy.example.test:8443',
+        ['proxy-user'],
+        null,
+        'BIR proxy username must be a string or null.',
+    ],
+    'non-string password' => [
+        'https://proxy.example.test:8443',
+        null,
+        false,
+        'BIR proxy password must be a string or null.',
+    ],
+]);
+
+it('rejects a non-array HTTP proxy configuration instead of silently bypassing it', function (): void {
+    config()->set('bir-regon.proxy', false);
+
+    expect(fn () => app(BirSoapTransportInterface::class))
+        ->toThrow(LogicException::class, 'BIR proxy configuration must be an array.');
 });
 
 it('builds isolated production and sandbox native transports from configuration', function (): void {
@@ -213,6 +366,76 @@ it('applies the configured response limit to both SOAP and inner XML decoders', 
             ->and(providerTestProperty($recordsDecoder, 'maxResponseBytes'))->toBe($configuredLimit);
     }
 });
+
+it('accepts bounded integer transport configuration from environment-style strings', function (): void {
+    config()->set('bir-regon.connection_timeout', '1');
+    config()->set('bir-regon.request_timeout', '300');
+    config()->set('bir-regon.max_response_bytes', '50000000');
+
+    $transport = app(BirSoapTransportInterface::class);
+
+    if (! $transport instanceof NativeSoapTransport) {
+        throw new LogicException('The provider did not construct the native transport.');
+    }
+
+    $decoder = providerTestProperty($transport, 'responseDecoder');
+
+    expect(providerTestProperty($transport, 'connectionTimeout'))->toBe(1)
+        ->and(providerTestProperty($transport, 'requestTimeout'))->toBe(300)
+        ->and(providerTestProperty($decoder, 'maxResponseBytes'))->toBe(50_000_000);
+});
+
+it('fails closed for unsafe transport configuration values', function (
+    string $key,
+    mixed $value,
+    string $message,
+): void {
+    config()->set('bir-regon.'.$key, $value);
+
+    expect(fn () => app(BirSoapTransportInterface::class))
+        ->toThrow(LogicException::class, $message);
+})->with([
+    'zero connection timeout' => [
+        'connection_timeout',
+        0,
+        'BIR connection timeout must be an integer between 1 and 60 seconds.',
+    ],
+    'excessive connection timeout' => [
+        'connection_timeout',
+        61,
+        'BIR connection timeout must be an integer between 1 and 60 seconds.',
+    ],
+    'excessive request timeout' => [
+        'request_timeout',
+        '301',
+        'BIR request timeout must be an integer between 1 and 300 seconds.',
+    ],
+    'excessive response size' => [
+        'max_response_bytes',
+        50_000_001,
+        'BIR maximum response size must be an integer between 1 and 50000000 bytes.',
+    ],
+    'non-decimal timeout' => [
+        'request_timeout',
+        '30.0',
+        'BIR request timeout must be an integer between 1 and 300 seconds.',
+    ],
+    'whitespace-padded response size' => [
+        'max_response_bytes',
+        ' 10000000 ',
+        'BIR maximum response size must be an integer between 1 and 50000000 bytes.',
+    ],
+    'boolean timeout' => [
+        'connection_timeout',
+        true,
+        'BIR connection timeout must be an integer between 1 and 60 seconds.',
+    ],
+    'array response size' => [
+        'max_response_bytes',
+        [10_000_000],
+        'BIR maximum response size must be an integer between 1 and 50000000 bytes.',
+    ],
+]);
 
 it('redacts the application container when dependency resolution fails', function (): void {
     $originalExceptionIgnoreArgs = ini_get('zend.exception_ignore_args');

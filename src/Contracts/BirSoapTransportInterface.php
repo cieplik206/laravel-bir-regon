@@ -14,5 +14,8 @@ interface BirSoapTransportInterface
     public function useSession(#[\SensitiveParameter] ?string $sessionId): void;
 
     /** @param array<string, mixed> $parameters */
-    public function call(BirOperation $operation, array $parameters = []): TransportResponse;
+    public function call(
+        BirOperation $operation,
+        #[\SensitiveParameter] array $parameters = [],
+    ): TransportResponse;
 }

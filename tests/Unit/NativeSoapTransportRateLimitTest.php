@@ -9,6 +9,7 @@ use cieplik206\BirRegon\Exceptions\BirRateLimitException;
 use cieplik206\BirRegon\Protocol\BirOperation;
 use cieplik206\BirRegon\Protocol\RawTransportResult;
 use cieplik206\BirRegon\Protocol\TransportFailureType;
+use cieplik206\BirRegon\RateLimit\UnlimitedBirRequestLimiter;
 use cieplik206\BirRegon\Transport\BirHttpSenderInterface;
 use cieplik206\BirRegon\Transport\NativeSoapTransport;
 
@@ -102,6 +103,7 @@ it('maps an unexpected limiter scope failure to an unavailable limiter exception
 it('maps an unexpected sender failure to a transport response', function (): void {
     $transport = new NativeSoapTransport(
         apiKey: 'APIKEYSENTINEL123456',
+        requestLimiter: new UnlimitedBirRequestLimiter,
         environment: Environment::Sandbox,
         httpSender: new NativeTransportThrowingSender,
     );
@@ -115,6 +117,7 @@ it('maps an unexpected sender failure to a transport response', function (): voi
 it('keeps malformed decoded SOAP classified as a protocol response', function (): void {
     $transport = new NativeSoapTransport(
         apiKey: 'APIKEYSENTINEL123456',
+        requestLimiter: new UnlimitedBirRequestLimiter,
         environment: Environment::Sandbox,
         httpSender: new NativeTransportRecordingSender('<not-soap/>'),
     );
@@ -130,31 +133,40 @@ final class NativeTransportRecordingLimiter implements BirRequestLimiterInterfac
     /** @var list<array{BirOperation, array<string, mixed>}> */
     public array $calls = [];
 
-    public function acquire(BirOperation $operation, array $parameters = []): void
-    {
+    public function acquire(
+        BirOperation $operation,
+        #[SensitiveParameter] array $parameters = [],
+    ): void {
         $this->calls[] = [$operation, $parameters];
     }
 }
 
 final class NativeTransportRejectingLimiter implements BirRequestLimiterInterface
 {
-    public function acquire(BirOperation $operation, array $parameters = []): void
-    {
+    public function acquire(
+        BirOperation $operation,
+        #[SensitiveParameter] array $parameters = [],
+    ): void {
         throw BirRateLimitException::quotaExceeded(9);
     }
 }
 
 final class NativeTransportThrowingLimiter implements BirRequestLimiterInterface
 {
-    public function acquire(BirOperation $operation, array $parameters = []): void
-    {
+    public function acquire(
+        BirOperation $operation,
+        #[SensitiveParameter] array $parameters = [],
+    ): void {
         throw new RuntimeException('Cache backend unavailable.');
     }
 }
 
 final class NativeTransportThrowingScopeLimiter implements BirRateLimitScopeInterface, BirRequestLimiterInterface
 {
-    public function acquire(BirOperation $operation, array $parameters = []): void {}
+    public function acquire(
+        BirOperation $operation,
+        #[SensitiveParameter] array $parameters = [],
+    ): void {}
 
     public function beginRateLimitScope(): void
     {

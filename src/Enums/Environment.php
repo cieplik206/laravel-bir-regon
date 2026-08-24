@@ -16,4 +16,12 @@ enum Environment: string
             self::Sandbox => 'https://wyszukiwarkaregontest.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc',
         };
     }
+
+    public function apiKeyEnvironmentVariable(): string
+    {
+        return match ($this) {
+            self::Production => 'BIR_API_KEY',
+            self::Sandbox => 'BIR_SANDBOX_API_KEY',
+        };
+    }
 }

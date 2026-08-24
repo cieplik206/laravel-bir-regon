@@ -76,7 +76,7 @@ final class FakeBirGateway implements BirGatewayInterface
         return $this;
     }
 
-    public function search(SearchCriteria $criteria): array
+    public function search(#[\SensitiveParameter] SearchCriteria $criteria): array
     {
         $this->calls[] = ['search', $criteria];
         $result = array_shift($this->searchQueue) ?? $this->searchResults;
@@ -88,8 +88,10 @@ final class FakeBirGateway implements BirGatewayInterface
         return $result;
     }
 
-    public function fullReport(string $regon, ReportType $reportType): array
-    {
+    public function fullReport(
+        #[\SensitiveParameter] string $regon,
+        ReportType $reportType,
+    ): array {
         $this->calls[] = ['fullReport', $regon, $reportType];
         $result = array_shift($this->fullReportQueue) ?? $this->fullReportData;
 

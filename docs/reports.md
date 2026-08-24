@@ -72,7 +72,7 @@ start a new `forRegon()` request. If no returned record supports the selected
 
 | Enum case | GUS report name | Scope |
 | --- | --- | --- |
-| `NaturalPerson` | `BIR12OsFizycznaDaneOgolne` | Natural person |
+| `NaturalPerson` | `BIR12OsFizycznaDaneOgolne` | Natural person from silo 1, 2, 3, or 4 |
 | `NaturalPersonCeidg` | `BIR12OsFizycznaDzialalnoscCeidg` | CEIDG activity |
 | `NaturalPersonAgro` | `BIR12OsFizycznaDzialalnoscRolnicza` | Agricultural activity |
 | `NaturalPersonOther` | `BIR12OsFizycznaDzialalnoscPozostala` | Other natural-person activity |
@@ -94,6 +94,13 @@ The selected report must match the strict `EntityType`, `Silo`, and REGON length
 returned by the search. The package rejects an incompatible selection before a
 full-report request. GUS still decides whether an applicable report is
 available and which fields it contains.
+
+`ReportType::NaturalPerson` is the general natural-person report and accepts
+the historical `Silo::DeletedBefore20141108` (`4`) as well as the active
+natural-person silos. This does not make every natural-person report compatible
+with silo 4: `NaturalPersonActivity` and `NaturalPersonLocals` remain limited to
+silos 1, 2, and 3, while `NaturalPersonDeletedBefore20141108` is the dedicated
+activity report for the historical silo.
 
 ## Bulk reports
 

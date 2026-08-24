@@ -6,3 +6,13 @@
 /composer.lock
 /SCRATCH.md
 /docs/reports/
+
+# Local credentials and environment overrides
+/.env
+/.env.*
+!/.env.example
+/auth.json
+
+# Local PHPUnit configuration overrides
+/phpunit.xml
+/phpunit.sandbox.xml

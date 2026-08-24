@@ -123,6 +123,13 @@ current session set through `useSession()`. Implementations must not expose the
 API key, session identifier, request XML, or raw response content in exception
 messages, stack traces, debug output, or serialized state.
 
+Native public and downstream methods mark NIP, REGON, KRS, `SearchCriteria`,
+and operation parameter arrays with `#[\SensitiveParameter]`. PHP does not
+inherit parameter attributes from an interface declaration. Every custom
+client, gateway, transport, limiter, validator, or fake must repeat the
+attribute on its own implementation parameters that can carry these values;
+annotating only the package interface does not redact the custom stack frame.
+
 The native implementation reserves the operation's limiter cost after local
 request construction and immediately before every HTTP exchange. Replacing
 `BirSoapTransportInterface` bypasses that implementation, so the custom
@@ -134,10 +141,12 @@ The native transport classifies failures at the boundary that produced them.
 An exception from a custom HTTP sender becomes a transport failure, while an
 unexpected exception from a custom limiter becomes
 `BirRateLimitException::limiterUnavailable()`. Envelope or response-decoding
-failures remain protocol failures. Completed HTTP 400 and 500 exchanges are
-decoded only when they carry a supported SOAP media type; a valid SOAP 1.2
-Fault is preserved as a safe typed fault code without retaining its raw
-`Reason`, `Detail`, or response body.
+failures remain protocol failures. A completed HTTP 200 response with an
+unsupported media type, including a `text/html` maintenance page, is a
+transport failure. Completed HTTP 400 and 500 exchanges are decoded only when
+they carry a supported SOAP media type; a valid SOAP 1.2 Fault is preserved as
+a safe typed fault code without retaining its raw `Reason`, `Detail`, or
+response body.
 
 A decoded transport result is private and is available only through
 `TransportResponse::result()`. Its debug representation is redacted. A
@@ -164,11 +173,28 @@ native sandbox graph so production extensions cannot accidentally receive the
 sandbox credential or session. Replace `BirRegonService` as a whole if an
 application also needs custom sandbox behavior.
 
-When `NativeSoapTransport` is instantiated directly, omitting its request
-limiter selects `UnlimitedBirRequestLimiter`. Laravel's cache-backed default is
-added by `BirRegonServiceProvider`, not by the standalone constructor. Pass an
-explicit `BirRequestLimiterInterface` implementation when constructing a
-native transport outside Laravel.
+`NativeSoapTransport` requires an explicit `BirRequestLimiterInterface` when it
+is instantiated directly. Laravel's service provider passes
+`CacheBirRequestLimiter` by default. Pass `UnlimitedBirRequestLimiter` only as
+a deliberate opt-out when another layer coordinates every caller using the
+credential, or in an isolated test that cannot perform network I/O.
+
+The Laravel provider also passes one explicit proxy configuration to both
+native environments when `BIR_PROXY_URL` is set. A direct
+`NativeSoapTransport` construction can use its `proxyUrl`, `proxyUsername`, and
+`proxyPassword` arguments. The URL accepts only an `http` or `https` scheme,
+host, and optional port; credentials must use the separate arguments and the
+username and password must be supplied together. The sender uses CONNECT,
+keeps target TLS verification enabled with a TLS 1.2 minimum, and applies the
+same minimum and verification to an HTTPS proxy.
+
+Do not combine these explicit proxy arguments with a custom
+`BirHttpSenderInterface`; construction fails closed because the package cannot
+safely decide which component owns routing and credentials. When the explicit
+proxy arguments are null, the native sender leaves libcurl's ambient proxy
+behavior intact, including `HTTPS_PROXY` and `NO_PROXY`. A fully custom sender
+owns its own proxy, TLS, credential-redaction, and routing policy, including
+enforcement of the deployment's minimum TLS version.
 
 The limiter contract is deliberately small:
 `BirRequestLimiterInterface::acquire(BirOperation $operation, array $parameters = []): void`.

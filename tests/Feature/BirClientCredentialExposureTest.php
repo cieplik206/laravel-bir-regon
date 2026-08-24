@@ -13,7 +13,6 @@ use cieplik206\BirRegon\Enums\EntityType;
 use cieplik206\BirRegon\Enums\Environment;
 use cieplik206\BirRegon\Enums\ReportType;
 use cieplik206\BirRegon\Enums\Silo;
-use cieplik206\BirRegon\Exceptions\BirAuthenticationException;
 use cieplik206\BirRegon\Exceptions\BirProtocolException;
 use cieplik206\BirRegon\Exceptions\BirRateLimitException;
 use cieplik206\BirRegon\Exceptions\BirTransportException;
@@ -26,6 +25,7 @@ use cieplik206\BirRegon\Protocol\SearchResult;
 use cieplik206\BirRegon\Protocol\SoapEnvelopeBuilder;
 use cieplik206\BirRegon\Protocol\TransportResponse;
 use cieplik206\BirRegon\RateLimit\CacheBirRequestLimiter;
+use cieplik206\BirRegon\RateLimit\UnlimitedBirRequestLimiter;
 use cieplik206\BirRegon\Tests\Support\FakeBirGateway;
 use cieplik206\BirRegon\Tests\Support\StubBirClient;
 use cieplik206\BirRegon\Transport\NativeSoapTransport;
@@ -75,8 +75,10 @@ final class BirCredentialTrapTransportFixture implements BirSoapTransportInterfa
         $this->activeSessionId = $sessionId;
     }
 
-    public function call(BirOperation $operation, array $parameters = []): TransportResponse
-    {
+    public function call(
+        BirOperation $operation,
+        #[SensitiveParameter] array $parameters = [],
+    ): TransportResponse {
         $parameter = $parameters['parameter'] ?? null;
 
         if (
@@ -234,9 +236,9 @@ it('does not expose the API key or rejected login payload through authentication
     try {
         $client->searchByNip('1234567890');
 
-        throw new LogicException('Expected the invalid login response to cause an authentication exception.');
-    } catch (BirAuthenticationException $exception) {
-        expect($exception->getMessage())->toBe('Invalid API key')
+        throw new LogicException('Expected the invalid login response to cause a protocol exception.');
+    } catch (BirProtocolException $exception) {
+        expect($exception->getMessage())->toBe('GUS BIR returned an invalid session identifier.')
             ->and($exception->getCode())->toBe(0)
             ->and($exception->getPrevious())->toBeNull();
 
@@ -419,7 +421,11 @@ it('does not retain the limiter API key in quota exceptions', function (): void 
 it('redacts native transport, envelope, session, and gateway debug output', function (): void {
     $apiKey = 'APIKEYSENTINEL123456';
     $sessionId = 'SIDSESSION1234567890';
-    $nativeTransport = new NativeSoapTransport($apiKey, Environment::Sandbox);
+    $nativeTransport = new NativeSoapTransport(
+        apiKey: $apiKey,
+        requestLimiter: new UnlimitedBirRequestLimiter,
+        environment: Environment::Sandbox,
+    );
     $nativeTransport->useSession($sessionId);
     $envelopeBuilder = new SoapEnvelopeBuilder($apiKey);
     $envelopeBuilder->useSession($sessionId);

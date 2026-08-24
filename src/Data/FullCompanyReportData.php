@@ -16,10 +16,12 @@ class FullCompanyReportData extends Data
      * @param  list<array<string, string>>  $reportData
      */
     public function __construct(
+        #[\SensitiveParameter]
         public CompanyData $basicData,
         public ReportType $reportType,
         #[\SensitiveParameter]
         public array $reportData,
+        #[\SensitiveParameter]
         public NormalizedFullReportData $normalized,
     ) {}
 

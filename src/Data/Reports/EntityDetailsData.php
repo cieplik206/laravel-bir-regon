@@ -10,7 +10,7 @@ use Spatie\LaravelData\Data;
 final class EntityDetailsData extends Data
 {
     public function __construct(
-        public EntityIdentityData $identity,
+        #[\SensitiveParameter] public EntityIdentityData $identity,
         public ?AddressData $address,
         public ?ContactData $contact,
         public ?LegalFormData $legalForm,

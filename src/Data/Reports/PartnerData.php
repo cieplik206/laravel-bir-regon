@@ -9,7 +9,7 @@ use Spatie\LaravelData\Data;
 final class PartnerData extends Data
 {
     public function __construct(
-        public ?string $regon,
+        #[\SensitiveParameter] public ?string $regon,
         public ?PersonNameData $personName,
         public ?string $companyName,
     ) {}

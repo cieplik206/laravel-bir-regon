@@ -10,7 +10,10 @@ use cieplik206\BirRegon\Protocol\BirOperation;
 
 final class UnlimitedBirRequestLimiter implements BirRateLimitScopeInterface, BirRequestLimiterInterface
 {
-    public function acquire(BirOperation $operation, array $parameters = []): void {}
+    public function acquire(
+        BirOperation $operation,
+        #[\SensitiveParameter] array $parameters = [],
+    ): void {}
 
     public function beginRateLimitScope(): void {}
 

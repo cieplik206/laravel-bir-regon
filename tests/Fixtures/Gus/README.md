@@ -26,7 +26,7 @@ repository. Official example payloads and third-party fixtures were not copied.
 - Identifiers are synthetic and may deliberately fail official checksums. They
   must never be sent to the live service.
 - The successful login fixture uses the synthetic 20-character SID
-  `fixture-session-0001`.
+  `fixtureSession000001`.
 - No API key, real SID, personal data, or raw service capture is stored here.
 - Error descriptions are short repository-authored paraphrases. Only protocol
   field names and documented numeric codes match the GUS contract.

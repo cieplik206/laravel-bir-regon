@@ -11,8 +11,8 @@ use cieplik206\BirRegon\Enums\Silo;
 final readonly class SearchResult
 {
     public function __construct(
-        public string $regon,
-        public ?string $nip,
+        #[\SensitiveParameter] public string $regon,
+        #[\SensitiveParameter] public ?string $nip,
         public string $name,
         public ?string $city,
         public ?string $postalCode,
@@ -23,7 +23,7 @@ final readonly class SearchResult
         public ?string $district,
         public ?string $commune,
         public EntityType $type,
-        public ?string $regon14,
+        #[\SensitiveParameter] public ?string $regon14,
         public ?NipStatus $nipStatus,
         public Silo $silo,
         public ?string $activityEndDate,
@@ -31,7 +31,7 @@ final readonly class SearchResult
     ) {}
 
     /** @param array<string, string> $record */
-    public static function tryFromRecord(array $record): ?self
+    public static function tryFromRecord(#[\SensitiveParameter] array $record): ?self
     {
         $regon = $record['Regon'] ?? '';
 

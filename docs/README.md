@@ -1,5 +1,12 @@
 # Laravel BIR REGON documentation
 
+> [!IMPORTANT]
+> These pages describe the unreleased 2.x development line. The latest
+> published and supported stable line is 1.1.x, whose platform requirements
+> and public API differ. Use the
+> [documentation shipped with v1.1.1](https://github.com/cieplik206/laravel-bir-regon/tree/v1.1.1#readme)
+> for production until 2.0.0 is published.
+
 Laravel BIR REGON provides a fluent, Laravel-native interface for the Polish
 GUS BIR/REGON API. It keeps SOAP 1.2/WS-Addressing over bounded cURL,
 authentication, distributed request limiting, and session management inside

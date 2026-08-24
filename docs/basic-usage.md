@@ -88,6 +88,9 @@ The sandbox service uses `BIR_SANDBOX_API_KEY` and keeps a session independent
 from production. Reuse the returned service for related sandbox calls. Both
 environments use the package's native GUS BIR 1.2 transport.
 
+Sandbox records may be stale, incomplete, artificial, or anonymized. A missing
+or different test result does not establish the entity's production state.
+
 ## Ending a session explicitly
 
 GUS sessions are reused only inside the current Laravel container scope and

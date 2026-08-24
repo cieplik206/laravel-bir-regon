@@ -40,8 +40,11 @@ final class SoapEnvelopeBuilder
     }
 
     /** @param array<string, mixed> $parameters */
-    public function build(BirOperation $operation, array $parameters, string $endpoint): ?string
-    {
+    public function build(
+        BirOperation $operation,
+        #[\SensitiveParameter] array $parameters,
+        string $endpoint,
+    ): ?string {
         $this->ensureNotRestoredFromSerialization();
 
         try {
@@ -100,7 +103,7 @@ final class SoapEnvelopeBuilder
         DOMDocument $document,
         DOMElement $request,
         BirOperation $operation,
-        array $parameters,
+        #[\SensitiveParameter] array $parameters,
     ): void {
         match ($operation) {
             BirOperation::Login => $this->appendTextParameter(
@@ -141,7 +144,7 @@ final class SoapEnvelopeBuilder
     private function appendSearchCriteria(
         DOMDocument $document,
         DOMElement $request,
-        mixed $criteria,
+        #[\SensitiveParameter] mixed $criteria,
     ): void {
         if (! $criteria instanceof SearchCriteria) {
             throw new \InvalidArgumentException('Search criteria are required.');
@@ -170,7 +173,7 @@ final class SoapEnvelopeBuilder
     private function appendFullReportParameters(
         DOMDocument $document,
         DOMElement $request,
-        array $parameters,
+        #[\SensitiveParameter] array $parameters,
     ): void {
         $regon = $parameters['regon'] ?? null;
         $reportType = $parameters['reportType'] ?? null;
@@ -187,7 +190,7 @@ final class SoapEnvelopeBuilder
     private function appendBulkReportParameters(
         DOMDocument $document,
         DOMElement $request,
-        array $parameters,
+        #[\SensitiveParameter] array $parameters,
     ): void {
         $date = $parameters['date'] ?? null;
         $reportType = $parameters['reportType'] ?? null;

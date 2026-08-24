@@ -11,13 +11,15 @@ final readonly class XmlDecodeResult
      */
     private function __construct(
         public bool $successful,
-        public array $records,
+        #[\SensitiveParameter] public array $records,
         public ?BirErrorData $error,
     ) {}
 
     /** @param list<array<string, string>> $records */
-    public static function success(array $records, ?BirErrorData $error = null): self
-    {
+    public static function success(
+        #[\SensitiveParameter] array $records,
+        ?BirErrorData $error = null,
+    ): self {
         return new self(true, $records, $error);
     }
 

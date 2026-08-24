@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use cieplik206\BirRegon\Contracts\BirEnvironmentAwareTransportInterface;
 use cieplik206\BirRegon\Contracts\BirSoapTransportInterface;
 use cieplik206\BirRegon\Enums\BulkReportType;
 use cieplik206\BirRegon\Enums\Environment;
@@ -23,6 +24,7 @@ use cieplik206\BirRegon\Protocol\SearchCriteria;
 use cieplik206\BirRegon\Protocol\TransportFailureType;
 use cieplik206\BirRegon\Protocol\TransportResponse;
 use cieplik206\BirRegon\RateLimit\CacheBirRequestLimiter;
+use cieplik206\BirRegon\RateLimit\UnlimitedBirRequestLimiter;
 use cieplik206\BirRegon\Tests\Support\QueueBirSoapTransport;
 use cieplik206\BirRegon\Transport\BirHttpSenderInterface;
 use cieplik206\BirRegon\Transport\NativeSoapTransport;
@@ -55,6 +57,54 @@ it('logs in once and reuses the SID for authenticated requests', function (): vo
             $firstSession,
         ])
         ->and($transport->authenticationChecks)->toBe(1);
+});
+
+it('accepts the successful login fixture through the native transport and gateway', function (): void {
+    $sender = new NativeGatewayQueueHttpSender(
+        nativeGatewayFixture('soap/login-success.xml'),
+        nativeGatewayFixture('soap/search.xml'),
+    );
+    $gateway = new NativeBirGateway(new NativeSoapTransport(
+        apiKey: 'fixtureApiKey0000000',
+        requestLimiter: new UnlimitedBirRequestLimiter,
+        environment: Environment::Sandbox,
+        httpSender: $sender,
+    ));
+
+    $results = $gateway->search(SearchCriteria::nip('0123456789'));
+
+    expect($results)->toHaveCount(1)
+        ->and($results[0]->regon)->toBe('012345678')
+        ->and($sender->operations)->toBe([
+            BirOperation::Login,
+            BirOperation::Search,
+        ]);
+});
+
+it('classifies an HTTP 200 maintenance page as a transport failure', function (): void {
+    $sender = new class implements BirHttpSenderInterface
+    {
+        public function send(
+            BirOperation $operation,
+            #[SensitiveParameter] string $soapEnvelope,
+            #[SensitiveParameter] ?string $sessionId,
+        ): RawTransportResult {
+            return RawTransportResult::completed(
+                '<html><body>Przerwa techniczna</body></html>',
+                'text/html; charset=UTF-8',
+                200,
+            );
+        }
+    };
+    $gateway = new NativeBirGateway(new NativeSoapTransport(
+        apiKey: 'fixtureApiKey0000000',
+        requestLimiter: new UnlimitedBirRequestLimiter,
+        environment: Environment::Sandbox,
+        httpSender: $sender,
+    ));
+
+    expect(fn () => $gateway->search(SearchCriteria::nip('0123456789')))
+        ->toThrow(BirTransportException::class, 'Unable to communicate with the GUS BIR service.');
 });
 
 it('preserves every search row in source order', function (): void {
@@ -157,6 +207,7 @@ it('preserves a native nil protocol failure without running session recovery', f
     );
     $gateway = new NativeBirGateway(new NativeSoapTransport(
         apiKey: 'APIKEYSENTINEL123456',
+        requestLimiter: new UnlimitedBirRequestLimiter,
         environment: Environment::Sandbox,
         httpSender: $sender,
     ));
@@ -473,6 +524,169 @@ it('does not renew from nil recovery diagnostics', function (string $nilField): 
     'nil message code' => ['message code'],
 ]);
 
+/** @param class-string<Throwable> $expectedException */
+it('preserves typed failures raised while diagnosing an empty authenticated response', function (
+    string $operation,
+    string $failedDiagnostic,
+    TransportFailureType $failureType,
+    ?SoapFaultCode $soapFaultCode,
+    string $expectedException,
+    string $expectedMessage,
+): void {
+    $failure = TransportResponse::failure(
+        $failureType,
+        soapFaultCode: $soapFaultCode,
+    );
+    $statusResponse = $failedDiagnostic === 'session status'
+        ? $failure
+        : TransportResponse::success('1');
+    $messageCodeResponse = $failedDiagnostic === 'message code'
+        ? $failure
+        : TransportResponse::success('0');
+    $transport = (new QueueBirSoapTransport)->queue(
+        TransportResponse::success('A1234567890123456789'),
+        TransportResponse::success(''),
+        $statusResponse,
+        $messageCodeResponse,
+    );
+    $gateway = new NativeBirGateway($transport);
+    $exception = null;
+
+    try {
+        $operation === 'records'
+            ? $gateway->search(SearchCriteria::nip('0123456789'))
+            : $gateway->getValue(GetValueParameter::Message);
+    } catch (Throwable $caught) {
+        $exception = $caught;
+    }
+
+    if (! $exception instanceof Throwable) {
+        throw new LogicException('The failed diagnostic response did not throw an exception.');
+    }
+
+    expect(is_a($exception, $expectedException))->toBeTrue()
+        ->and($exception->getMessage())->toBe($expectedMessage)
+        ->and(array_column($transport->calls, 0))->toBe([
+            BirOperation::Login,
+            $operation === 'records' ? BirOperation::Search : BirOperation::GetValue,
+            BirOperation::GetValue,
+            BirOperation::GetValue,
+        ])
+        ->and($transport->authenticationChecks)->toBe(1);
+
+    if ($soapFaultCode !== null) {
+        if (! $exception instanceof BirSoapFaultException) {
+            throw new LogicException('The diagnostic SOAP fault lost its typed exception.');
+        }
+
+        expect($exception->faultCode)->toBe($soapFaultCode);
+    }
+})->with([
+    'records / session status / transport' => [
+        'records',
+        'session status',
+        TransportFailureType::Transport,
+        null,
+        BirTransportException::class,
+        'Unable to communicate with the GUS BIR service.',
+    ],
+    'records / message code / transport' => [
+        'records',
+        'message code',
+        TransportFailureType::Transport,
+        null,
+        BirTransportException::class,
+        'Unable to communicate with the GUS BIR service.',
+    ],
+    'scalar / session status / transport' => [
+        'scalar',
+        'session status',
+        TransportFailureType::Transport,
+        null,
+        BirTransportException::class,
+        'Unable to communicate with the GUS BIR service.',
+    ],
+    'scalar / message code / transport' => [
+        'scalar',
+        'message code',
+        TransportFailureType::Transport,
+        null,
+        BirTransportException::class,
+        'Unable to communicate with the GUS BIR service.',
+    ],
+    'records / session status / SOAP fault' => [
+        'records',
+        'session status',
+        TransportFailureType::Protocol,
+        SoapFaultCode::Receiver,
+        BirSoapFaultException::class,
+        'GUS BIR reported a SOAP service failure.',
+    ],
+    'records / message code / SOAP fault' => [
+        'records',
+        'message code',
+        TransportFailureType::Protocol,
+        SoapFaultCode::Receiver,
+        BirSoapFaultException::class,
+        'GUS BIR reported a SOAP service failure.',
+    ],
+    'scalar / session status / SOAP fault' => [
+        'scalar',
+        'session status',
+        TransportFailureType::Protocol,
+        SoapFaultCode::Receiver,
+        BirSoapFaultException::class,
+        'GUS BIR reported a SOAP service failure.',
+    ],
+    'scalar / message code / SOAP fault' => [
+        'scalar',
+        'message code',
+        TransportFailureType::Protocol,
+        SoapFaultCode::Receiver,
+        BirSoapFaultException::class,
+        'GUS BIR reported a SOAP service failure.',
+    ],
+    'records / session status / protocol' => [
+        'records',
+        'session status',
+        TransportFailureType::Protocol,
+        null,
+        BirProtocolException::class,
+        'GUS BIR returned an invalid SOAP response.',
+    ],
+    'scalar / message code / protocol' => [
+        'scalar',
+        'message code',
+        TransportFailureType::Protocol,
+        null,
+        BirProtocolException::class,
+        'GUS BIR returned an invalid SOAP response.',
+    ],
+]);
+
+it('does not renew a session from a partial diagnostic snapshot when another component failed', function (): void {
+    $transport = (new QueueBirSoapTransport)->queue(
+        TransportResponse::success('A1234567890123456789'),
+        TransportResponse::success(''),
+        TransportResponse::success('0'),
+        TransportResponse::failure(
+            TransportFailureType::Protocol,
+            soapFaultCode: SoapFaultCode::Receiver,
+        ),
+    );
+    $gateway = new NativeBirGateway($transport);
+
+    expect(fn () => $gateway->search(SearchCriteria::nip('0123456789')))
+        ->toThrow(BirSoapFaultException::class, 'GUS BIR reported a SOAP service failure.')
+        ->and(array_column($transport->calls, 0))->toBe([
+            BirOperation::Login,
+            BirOperation::Search,
+            BirOperation::GetValue,
+            BirOperation::GetValue,
+        ])
+        ->and($transport->authenticationChecks)->toBe(1);
+});
+
 it('returns a genuinely empty authenticated message without renewing an active session', function (): void {
     $session = 'A1234567890123456789';
     $transport = (new QueueBirSoapTransport)->queue(
@@ -520,6 +734,69 @@ it('fails for a missing key before making a transport call', function (): void {
         ->and($transport->authenticationChecks)->toBe(1)
         ->and($transport->calls)->toBe([])
         ->and($transport->sessionIds)->toBe([]);
+});
+
+it('uses a neutral missing-key hint for a custom transport without environment metadata', function (): void {
+    $transport = new class implements BirSoapTransportInterface
+    {
+        public function isAuthenticationConfigured(): bool
+        {
+            return false;
+        }
+
+        public function useSession(#[SensitiveParameter] ?string $sessionId): void
+        {
+            unset($sessionId);
+        }
+
+        public function call(
+            BirOperation $operation,
+            #[SensitiveParameter] array $parameters = [],
+        ): TransportResponse {
+            throw new LogicException('Authentication validation should stop before transport I/O.');
+        }
+    };
+    $gateway = new NativeBirGateway($transport);
+
+    expect(fn () => $gateway->search(SearchCriteria::nip('0123456789')))
+        ->toThrow(
+            BirAuthenticationException::class,
+            'BIR API key is not configured for the selected environment. Configure BIR_API_KEY for production or BIR_SANDBOX_API_KEY for sandbox.',
+        );
+});
+
+it('uses a neutral missing-key hint when custom environment metadata is unavailable', function (): void {
+    $transport = new class implements BirEnvironmentAwareTransportInterface, BirSoapTransportInterface
+    {
+        public function isAuthenticationConfigured(): bool
+        {
+            return false;
+        }
+
+        public function environment(): Environment
+        {
+            throw new RuntimeException('raw metadata failure');
+        }
+
+        public function useSession(#[SensitiveParameter] ?string $sessionId): void
+        {
+            unset($sessionId);
+        }
+
+        public function call(
+            BirOperation $operation,
+            #[SensitiveParameter] array $parameters = [],
+        ): TransportResponse {
+            throw new LogicException('Authentication validation should stop before transport I/O.');
+        }
+    };
+    $gateway = new NativeBirGateway($transport);
+
+    expect(fn () => $gateway->search(SearchCriteria::nip('0123456789')))
+        ->toThrow(
+            BirAuthenticationException::class,
+            'BIR API key is not configured for the selected environment. Configure BIR_API_KEY for production or BIR_SANDBOX_API_KEY for sandbox.',
+        );
 });
 
 it('renews an inactive session once after an empty outer result', function (): void {
@@ -878,14 +1155,25 @@ it('clears the replacement SID after an authenticated scalar expires twice', fun
         ->and($transport->authenticationChecks)->toBe(3);
 });
 
-it('rejects an invalid login result as an authentication failure', function (): void {
+it('rejects an empty login result as an authentication failure', function (): void {
+    $transport = (new QueueBirSoapTransport)->queue(
+        TransportResponse::success(''),
+    );
+    $gateway = new NativeBirGateway($transport);
+
+    expect(fn () => $gateway->search(SearchCriteria::nip('0123456789')))
+        ->toThrow(BirAuthenticationException::class, 'Invalid API key')
+        ->and(array_column($transport->calls, 0))->toBe([BirOperation::Login]);
+});
+
+it('rejects a malformed non-empty login result as a protocol failure', function (): void {
     $transport = (new QueueBirSoapTransport)->queue(
         TransportResponse::success('not-a-valid-sid'),
     );
     $gateway = new NativeBirGateway($transport);
 
     expect(fn () => $gateway->search(SearchCriteria::nip('0123456789')))
-        ->toThrow(BirAuthenticationException::class, 'Invalid API key')
+        ->toThrow(BirProtocolException::class, 'GUS BIR returned an invalid session identifier.')
         ->and(array_column($transport->calls, 0))->toBe([BirOperation::Login]);
 });
 
@@ -941,7 +1229,10 @@ it('maps full report error code 4 to not found', function (): void {
     $gateway = new NativeBirGateway($transport);
 
     expect(fn () => $gateway->fullReport('012345678', ReportType::Organization))
-        ->toThrow(BirNotFoundException::class, 'Nie znaleziono firmy dla REGON: 012345678');
+        ->toThrow(
+            BirNotFoundException::class,
+            'Nie znaleziono podmiotu dla identyfikatora typu REGON.',
+        );
 });
 
 it('preserves the GUS code for a rejected full report', function (): void {
@@ -1224,8 +1515,10 @@ final class DiagnosticsSessionSwitchingTransport implements BirSoapTransportInte
         $this->sessionId = $sessionId;
     }
 
-    public function call(BirOperation $operation, array $parameters = []): TransportResponse
-    {
+    public function call(
+        BirOperation $operation,
+        #[SensitiveParameter] array $parameters = [],
+    ): TransportResponse {
         $this->calls[] = [$operation, $parameters, $this->sessionId];
 
         if ($operation === BirOperation::Login) {

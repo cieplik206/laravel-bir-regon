@@ -15,6 +15,7 @@ use cieplik206\BirRegon\Gateway\NativeBirGateway;
 use cieplik206\BirRegon\Protocol\BirOperation;
 use cieplik206\BirRegon\Protocol\GetValueParameter;
 use cieplik206\BirRegon\Protocol\SoapEnvelopeBuilder;
+use cieplik206\BirRegon\RateLimit\UnlimitedBirRequestLimiter;
 use cieplik206\BirRegon\Tests\Support\FakeBirGateway;
 use cieplik206\BirRegon\Transport\NativeSoapTransport;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -44,7 +45,11 @@ final class BirBuilderQueueJobFixture implements ShouldQueue
 it('restores every security-sensitive BIR object as a credential-free tombstone', function (): void {
     $apiKey = 'APIKEYSENTINEL123456';
     $sessionId = 'SIDSESSION1234567890';
-    $transport = new NativeSoapTransport($apiKey, Environment::Sandbox);
+    $transport = new NativeSoapTransport(
+        apiKey: $apiKey,
+        requestLimiter: new UnlimitedBirRequestLimiter,
+        environment: Environment::Sandbox,
+    );
     $transport->useSession($sessionId);
     $envelopeBuilder = new SoapEnvelopeBuilder($apiKey);
     $envelopeBuilder->useSession($sessionId);
@@ -106,7 +111,11 @@ it('restores every security-sensitive BIR object as a credential-free tombstone'
 it('does not expose native client credentials in a queued job payload', function (): void {
     $apiKey = 'APIKEYSENTINEL123456';
     $sessionId = 'SIDSESSION1234567890';
-    $transport = new NativeSoapTransport($apiKey, Environment::Sandbox);
+    $transport = new NativeSoapTransport(
+        apiKey: $apiKey,
+        requestLimiter: new UnlimitedBirRequestLimiter,
+        environment: Environment::Sandbox,
+    );
     $transport->useSession($sessionId);
     $job = new BirBuilderQueueJobFixture(
         (new BirRegonService(

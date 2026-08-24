@@ -18,7 +18,7 @@ For exhaustive details, read only the relevant page under
 Install the package and configure credentials through the environment:
 
 ```bash
-composer require cieplik206/laravel-bir-regon
+composer require cieplik206/laravel-bir-regon:^2.0
 ```
 
 ```dotenv
@@ -28,6 +28,9 @@ BIR_CONNECTION_TIMEOUT=10
 BIR_REQUEST_TIMEOUT=30
 BIR_MAX_RESPONSE_BYTES=10000000
 BIR_IDENTIFIER_VALIDATION=format
+BIR_PROXY_URL=
+BIR_PROXY_USERNAME=
+BIR_PROXY_PASSWORD=
 BIR_RATE_LIMIT_ENABLED=true
 BIR_RATE_LIMIT_STORE=redis
 BIR_RATE_LIMIT_PREFIX=bir-regon:rate-limit
@@ -42,6 +45,18 @@ php artisan vendor:publish --tag=bir-regon-config
 
 Never log or commit a production BIR API key. The public service-status call is
 unauthenticated; searches, reports, data status, and diagnostics require a key.
+Missing native credentials name `BIR_API_KEY` for production or
+`BIR_SANDBOX_API_KEY` for sandbox. Sandbox data may be stale, incomplete,
+artificial, or anonymized; never infer the current production registry state
+from a missing or different sandbox result.
+
+Transport configuration is strict: connection timeout is `1..60` seconds,
+request timeout is `1..300` seconds, and maximum response size is
+`1..50000000` bytes. Laravel configuration and environment values accept
+integers or canonical decimal integer strings; direct native transport and
+sender constructors require integers. Do not cast or silently clamp invalid
+configuration. The native sender verifies the GUS target with TLS 1.2 or newer
+and applies the same minimum to an HTTPS proxy.
 
 ## Accessing the API
 
@@ -162,6 +177,13 @@ The 17 cases include `ReportType::OrganizationLocalWithNip` for
 `vendor/cieplik206/laravel-bir-regon/docs/reports.md` or inspect `ReportType`
 instead of inventing GUS report-name strings.
 
+`ReportType::NaturalPerson` is the general report for natural-person silos 1,
+2, 3, and the historical `Silo::DeletedBefore20141108` (`4`). Do not extend
+that rule to `NaturalPersonActivity` or `NaturalPersonLocals`, which remain
+limited to silos 1, 2, and 3. Use
+`NaturalPersonDeletedBefore20141108` for the dedicated historical activity
+report.
+
 `FullCompanyReportData` exposes:
 
 ```php
@@ -222,11 +244,28 @@ service for related calls. The transport resets bodies and SID headers between
 calls while retaining connection and TLS caches. Do not add environment
 selection to request builders or instantiate one-off clients.
 
+Set `BIR_PROXY_URL` when both native environments must use an explicit
+corporate proxy. It accepts only `http` or `https`, a host, and an optional
+port. Never embed userinfo in the URL; set `BIR_PROXY_USERNAME` and
+`BIR_PROXY_PASSWORD` together when authentication is required. Explicit proxy
+routing uses CONNECT, does not honor an ambient `NO_PROXY` bypass, verifies the
+GUS target and an HTTPS proxy, and cannot be combined with a custom HTTP sender.
+Prefer an `https://` proxy for credentials; an `http://` client-to-proxy link
+is unencrypted even though target TLS inside CONNECT protects the SOAP exchange.
+With `BIR_PROXY_URL` empty, preserve libcurl's ambient `HTTPS_PROXY` and
+`NO_PROXY` behavior. Do not disable TLS verification or expose proxy values in
+logs, exceptions, debug output, or serialized state.
+
 Laravel enables the cache-backed request limiter by default. On
 `BirRateLimitException`, back off for `retryAfterSeconds()`; do not immediately
 retry or bypass the limiter. Read
 `vendor/cieplik206/laravel-bir-regon/docs/rate-limits.md` for configuration and
 request weights.
+
+Direct `NativeSoapTransport` construction requires an explicit
+`BirRequestLimiterInterface`. Use `UnlimitedBirRequestLimiter` only when
+another layer coordinates every caller using the key or in a deterministic,
+network-free test.
 
 The limiter uses conservative weighted GCRA spacing per second. Separate SOAP
 operations receive no initial burst. A batch larger than the active per-second
@@ -286,6 +325,14 @@ must implement `diagnostics(): DiagnosticsSnapshot` and return the message code,
 message, and session status from one captured SID. If session renewal changes
 the SID, repeat the complete snapshot rather than mixing values from two
 sessions. Custom gateways must also implement `logout(): bool`.
+
+For a public diagnostic snapshot, a completed status-and-message-code pair that
+authoritatively identifies expiry discards every first-attempt response and
+repeats the whole snapshot once. Otherwise, preserve a component's actual
+`BirTransportException`, `BirSoapFaultException`, `BirProtocolException`, or
+`BirRateLimitException`; never manufacture a partial snapshot. For internal
+empty-response diagnostics, never renew from a partial status-and-message-code
+pair or collapse its typed failure into a generic incomplete-diagnostics error.
 
 ## Results and untrusted registry values
 
@@ -358,13 +405,28 @@ try {
 
 All specialized exceptions extend `BirException`. The package omits the active
 API key, session ID, request XML, response body, and raw upstream exception from
-the returned exception graph. Read `BirReportException::$gusCode` for a
-rejected report. Use `BirValidationException`, `BirTransportException`, and
+the returned exception graph. It also omits NIP, REGON, and KRS values from
+not-found and ambiguity messages and properties, and marks native argument
+carriers with `#[\SensitiveParameter]`. PHP does not inherit parameter
+attributes from interfaces, so custom client, gateway, transport, limiter, and
+test-fake implementations must repeat the attribute on their sensitive
+parameters. `BirAmbiguousResultException::$identifier` does not exist; keep an
+application correlation value separately if needed. Construct
+`BirNotFoundException` with only the identifier type, and construct
+`BirAmbiguousResultException` with the identifier type and compatible target
+count. Read `BirReportException::$gusCode` for a rejected report. Use
+`BirValidationException`, `BirTransportException`, and
 `BirProtocolException` when retry policy needs to distinguish local input,
 connectivity, and malformed responses.
 `BirSoapFaultException` extends `BirProtocolException` and retains only a safe
 `SoapFaultCode` enum; the remote Reason, Detail, and raw response body are not
 kept.
+
+Treat an HTTP 200 response with an unsupported media type, such as a GUS HTML
+maintenance page, as `BirTransportException`; do not parse or expose the body.
+The package does not automatically retry that operation. A non-empty malformed
+login SID is `BirProtocolException`, while an empty login result is an
+authentication rejection.
 
 Never catch every `BirException` only to release a queued job for one fixed
 delay. Release using `BirRateLimitException::retryAfterSeconds()` only for the

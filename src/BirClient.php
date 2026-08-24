@@ -41,38 +41,36 @@ class BirClient implements BirClientInterface
     }
 
     /** @return list<CompanyData> */
-    public function searchByNip(string $nip): array
+    public function searchByNip(#[\SensitiveParameter] string $nip): array
     {
         $this->ensureNotRestoredFromSerialization();
 
         return $this->searchMany(
             SearchCriteria::nip($nip, validateChecksum: $this->validatesChecksums()),
-            [$nip],
             'NIP',
         );
     }
 
     /** @return list<CompanyData> */
-    public function searchByRegon(string $regon): array
+    public function searchByRegon(#[\SensitiveParameter] string $regon): array
     {
         $this->ensureNotRestoredFromSerialization();
 
         return $this->searchMany(
             SearchCriteria::regon($regon, validateChecksum: $this->validatesChecksums()),
-            [$regon],
             'REGON',
         );
     }
 
     /** @return list<CompanyData> */
-    public function searchByKrs(string $krs): array
+    public function searchByKrs(#[\SensitiveParameter] string $krs): array
     {
         $this->ensureNotRestoredFromSerialization();
 
-        return $this->searchMany(SearchCriteria::krs($krs), [$krs], 'KRS');
+        return $this->searchMany(SearchCriteria::krs($krs), 'KRS');
     }
 
-    public function searchByNips(array $nips): array
+    public function searchByNips(#[\SensitiveParameter] array $nips): array
     {
         $this->ensureNotRestoredFromSerialization();
 
@@ -83,12 +81,11 @@ class BirClient implements BirClientInterface
                     array_values($nips),
                     validateChecksum: $this->validatesChecksums(),
                 ),
-                $nips,
                 'NIP',
             );
     }
 
-    public function searchByKrsNumbers(array $krsNumbers): array
+    public function searchByKrsNumbers(#[\SensitiveParameter] array $krsNumbers): array
     {
         $this->ensureNotRestoredFromSerialization();
 
@@ -96,12 +93,11 @@ class BirClient implements BirClientInterface
             ? []
             : $this->searchMany(
                 SearchCriteria::krsNumbers(array_values($krsNumbers)),
-                $krsNumbers,
                 'KRS',
             );
     }
 
-    public function searchByRegons9(array $regons): array
+    public function searchByRegons9(#[\SensitiveParameter] array $regons): array
     {
         $this->ensureNotRestoredFromSerialization();
 
@@ -112,12 +108,11 @@ class BirClient implements BirClientInterface
                     array_values($regons),
                     validateChecksum: $this->validatesChecksums(),
                 ),
-                $regons,
                 'REGON9',
             );
     }
 
-    public function searchByRegons14(array $regons): array
+    public function searchByRegons14(#[\SensitiveParameter] array $regons): array
     {
         $this->ensureNotRestoredFromSerialization();
 
@@ -128,71 +123,78 @@ class BirClient implements BirClientInterface
                     array_values($regons),
                     validateChecksum: $this->validatesChecksums(),
                 ),
-                $regons,
                 'REGON14',
             );
     }
 
-    public function getFullReportByNip(string $nip, ReportType $reportType): FullCompanyReportData
-    {
+    public function getFullReportByNip(
+        #[\SensitiveParameter] string $nip,
+        ReportType $reportType,
+    ): FullCompanyReportData {
         $this->ensureNotRestoredFromSerialization();
 
         return $this->getFullReportFromSearch(
             SearchCriteria::nip($nip, validateChecksum: $this->validatesChecksums()),
-            $nip,
             'NIP',
             $reportType,
         );
     }
 
     /** @return list<FullCompanyReportData> */
-    public function getFullReportsByNip(string $nip, ReportType $reportType): array
-    {
+    public function getFullReportsByNip(
+        #[\SensitiveParameter] string $nip,
+        ReportType $reportType,
+    ): array {
         $this->ensureNotRestoredFromSerialization();
 
         return $this->getFullReportsFromSearch(
             SearchCriteria::nip($nip, validateChecksum: $this->validatesChecksums()),
-            $nip,
             'NIP',
             $reportType,
         );
     }
 
-    public function getFullReportByKrs(string $krs, ReportType $reportType): FullCompanyReportData
-    {
+    public function getFullReportByKrs(
+        #[\SensitiveParameter] string $krs,
+        ReportType $reportType,
+    ): FullCompanyReportData {
         $this->ensureNotRestoredFromSerialization();
 
-        return $this->getFullReportFromSearch(SearchCriteria::krs($krs), $krs, 'KRS', $reportType);
+        return $this->getFullReportFromSearch(SearchCriteria::krs($krs), 'KRS', $reportType);
     }
 
     /** @return list<FullCompanyReportData> */
-    public function getFullReportsByKrs(string $krs, ReportType $reportType): array
-    {
+    public function getFullReportsByKrs(
+        #[\SensitiveParameter] string $krs,
+        ReportType $reportType,
+    ): array {
         $this->ensureNotRestoredFromSerialization();
 
-        return $this->getFullReportsFromSearch(SearchCriteria::krs($krs), $krs, 'KRS', $reportType);
+        return $this->getFullReportsFromSearch(SearchCriteria::krs($krs), 'KRS', $reportType);
     }
 
-    public function getFullReport(string $regon, ReportType $reportType): FullCompanyReportData
-    {
+    public function getFullReport(
+        #[\SensitiveParameter] string $regon,
+        ReportType $reportType,
+    ): FullCompanyReportData {
         $this->ensureNotRestoredFromSerialization();
 
         return $this->getFullReportFromSearch(
             SearchCriteria::regon($regon, validateChecksum: $this->validatesChecksums()),
-            $regon,
             'REGON',
             $reportType,
         );
     }
 
     /** @return list<FullCompanyReportData> */
-    public function getFullReports(string $regon, ReportType $reportType): array
-    {
+    public function getFullReports(
+        #[\SensitiveParameter] string $regon,
+        ReportType $reportType,
+    ): array {
         $this->ensureNotRestoredFromSerialization();
 
         return $this->getFullReportsFromSearch(
             SearchCriteria::regon($regon, validateChecksum: $this->validatesChecksums()),
-            $regon,
             'REGON',
             $reportType,
         );
@@ -305,31 +307,26 @@ class BirClient implements BirClientInterface
         return $this->identifierValidationMode->validatesChecksum();
     }
 
-    /**
-     * @param  array<int, string>  $identifiers
-     * @return list<CompanyData>
-     */
+    /** @return list<CompanyData> */
     private function searchMany(
-        SearchCriteria $criteria,
-        array $identifiers,
+        #[\SensitiveParameter] SearchCriteria $criteria,
         string $type,
     ): array {
-        $reports = $this->searchResults($criteria, implode(', ', $identifiers), $type);
+        $reports = $this->searchResults($criteria, $type);
 
         return array_map(CompanyData::fromSearchResult(...), $reports);
     }
 
     /** @return list<SearchResult> */
     private function searchResults(
-        SearchCriteria $criteria,
-        string $identifier,
+        #[\SensitiveParameter] SearchCriteria $criteria,
         string $type,
     ): array {
         try {
             $reports = $this->gateway()->search($criteria);
 
             if ($reports === []) {
-                throw new BirNotFoundException($identifier, $type);
+                throw new BirNotFoundException($type);
             }
 
             return $reports;
@@ -341,15 +338,13 @@ class BirClient implements BirClientInterface
     }
 
     private function getFullReportFromSearch(
-        SearchCriteria $criteria,
-        string $identifier,
+        #[\SensitiveParameter] SearchCriteria $criteria,
         string $identifierType,
         ReportType $reportType,
     ): FullCompanyReportData {
         $compatibleReports = $this->uniqueReportRequests(
             $this->compatibleReportsFromSearch(
                 $criteria,
-                $identifier,
                 $identifierType,
                 $reportType,
             ),
@@ -358,7 +353,6 @@ class BirClient implements BirClientInterface
 
         if (count($compatibleReports) > 1) {
             throw new BirAmbiguousResultException(
-                $identifier,
                 $identifierType,
                 count($compatibleReports),
             );
@@ -369,15 +363,13 @@ class BirClient implements BirClientInterface
 
     /** @return list<FullCompanyReportData> */
     private function getFullReportsFromSearch(
-        SearchCriteria $criteria,
-        string $identifier,
+        #[\SensitiveParameter] SearchCriteria $criteria,
         string $identifierType,
         ReportType $reportType,
     ): array {
         $compatibleReports = $this->uniqueReportRequests(
             $this->compatibleReportsFromSearch(
                 $criteria,
-                $identifier,
                 $identifierType,
                 $reportType,
             ),
@@ -397,8 +389,10 @@ class BirClient implements BirClientInterface
      * @param  non-empty-list<SearchResult>  $reports
      * @return non-empty-list<SearchResult>
      */
-    private function uniqueReportRequests(array $reports, ReportType $reportType): array
-    {
+    private function uniqueReportRequests(
+        #[\SensitiveParameter] array $reports,
+        ReportType $reportType,
+    ): array {
         $uniqueReports = [];
 
         foreach ($reports as $report) {
@@ -414,13 +408,12 @@ class BirClient implements BirClientInterface
 
     /** @return non-empty-list<SearchResult> */
     private function compatibleReportsFromSearch(
-        SearchCriteria $criteria,
-        string $identifier,
+        #[\SensitiveParameter] SearchCriteria $criteria,
         string $identifierType,
         ReportType $reportType,
     ): array {
         $compatibleReports = array_values(array_filter(
-            $this->searchResults($criteria, $identifier, $identifierType),
+            $this->searchResults($criteria, $identifierType),
             $reportType->supports(...),
         ));
 

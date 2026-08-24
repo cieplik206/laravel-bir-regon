@@ -14,7 +14,7 @@ report failures into a package exception hierarchy.
 | `BirAuthenticationException` | The API key is missing or rejected, or an expired session cannot be renewed |
 | `BirRateLimitException` | The local request quota is exhausted or its cache-backed coordination is unavailable |
 | `BirValidationException` | An identifier, batch, date, or report/entity combination is invalid before network access |
-| `BirTransportException` | The package cannot safely complete the HTTPS/SOAP exchange |
+| `BirTransportException` | The package cannot safely complete the HTTPS/SOAP exchange, including when an HTTP 200 response contains a non-SOAP maintenance page |
 | `BirSoapFaultException` | GUS returns a valid SOAP 1.2 Fault; `faultCode` contains a safe `SoapFaultCode` enum |
 | `BirProtocolException` | GUS returns malformed, ambiguous, or unexpected SOAP/XML data |
 | `BirReportException` | GUS rejects a full or bulk report; `gusCode` contains the numeric result code |
@@ -22,6 +22,11 @@ report failures into a package exception hierarchy.
 
 Every specialized exception extends `BirException`, so applications may either
 handle individual cases or catch the package's base exception.
+
+For a missing native credential, the exception identifies the correct setting:
+`BIR_API_KEY` for production or `BIR_SANDBOX_API_KEY` for the sandbox. A custom
+transport that does not expose environment metadata receives a neutral message
+that names both possibilities.
 
 ## Handling individual failures
 
@@ -86,6 +91,26 @@ standard `Sender`, `Receiver`, `MustUnderstand`, `VersionMismatch`, or
 `DataEncodingUnknown` enum is retained. The upstream `Reason` and `Detail` are
 discarded.
 
+NIP, REGON, and KRS values are also omitted from package-generated not-found
+and ambiguity messages and from their public properties. Native entry points
+and downstream carriers use `#[\SensitiveParameter]`, so PHP replaces those
+arguments with `SensitiveParameterValue` in stack traces. Do not parse an
+identifier from `BirNotFoundException` or
+`BirAmbiguousResultException::$identifier`: that property no longer exists.
+Keep the operation input separately when application policy requires a
+correlation value.
+
+A completed HTTP 200 exchange is successful only when its media type is one of
+the supported SOAP representations. A `text/html` maintenance page or another
+non-SOAP 200 response is treated as `BirTransportException`; its body is not
+retained. The package does not retry the application operation automatically.
+Choose any retry or queue-backoff policy at the application boundary.
+
+An empty login result means the key was rejected and raises
+`BirAuthenticationException`. A non-empty login result that is not a valid
+20-character SID is malformed protocol data and raises
+`BirProtocolException`, rather than blaming the configured key.
+
 ## Request-limit failures
 
 `BirRateLimitException` is raised before opening the HTTP connection. The
@@ -133,6 +158,12 @@ An expired session is cleared, recreated, and the original operation is retried
 at most once. A second expiry clears the replacement SID and raises
 `BirAuthenticationException`. A transport or protocol failure is reported
 immediately without issuing additional session-diagnostic requests.
+
+When the original response was successfully delivered but ambiguously empty,
+the gateway must read session status and message code before deciding whether
+to renew. If either diagnostic request fails, its typed transport, SOAP-fault,
+or protocol exception is propagated directly. A partial diagnostic pair never
+triggers renewal and is not collapsed into a generic protocol error.
 
 ## Logout failures
 

@@ -34,7 +34,7 @@ class StubBirClient implements BirClientInterface
     ) {}
 
     /** @return list<CompanyData> */
-    public function searchByNip(string $nip): array
+    public function searchByNip(#[\SensitiveParameter] string $nip): array
     {
         $this->calls[] = ['searchByNip', $nip];
 
@@ -42,7 +42,7 @@ class StubBirClient implements BirClientInterface
     }
 
     /** @return list<CompanyData> */
-    public function searchByRegon(string $regon): array
+    public function searchByRegon(#[\SensitiveParameter] string $regon): array
     {
         $this->calls[] = ['searchByRegon', $regon];
 
@@ -50,81 +50,93 @@ class StubBirClient implements BirClientInterface
     }
 
     /** @return list<CompanyData> */
-    public function searchByKrs(string $krs): array
+    public function searchByKrs(#[\SensitiveParameter] string $krs): array
     {
         $this->calls[] = ['searchByKrs', $krs];
 
         return $this->configuredCompanies();
     }
 
-    public function searchByNips(array $nips): array
+    public function searchByNips(#[\SensitiveParameter] array $nips): array
     {
         $this->calls[] = ['searchByNips', $nips];
 
         return $this->configuredCompanies();
     }
 
-    public function searchByKrsNumbers(array $krsNumbers): array
+    public function searchByKrsNumbers(#[\SensitiveParameter] array $krsNumbers): array
     {
         $this->calls[] = ['searchByKrsNumbers', $krsNumbers];
 
         return $this->configuredCompanies();
     }
 
-    public function searchByRegons9(array $regons): array
+    public function searchByRegons9(#[\SensitiveParameter] array $regons): array
     {
         $this->calls[] = ['searchByRegons9', $regons];
 
         return $this->configuredCompanies();
     }
 
-    public function searchByRegons14(array $regons): array
+    public function searchByRegons14(#[\SensitiveParameter] array $regons): array
     {
         $this->calls[] = ['searchByRegons14', $regons];
 
         return $this->configuredCompanies();
     }
 
-    public function getFullReport(string $regon, ReportType $reportType): FullCompanyReportData
-    {
+    public function getFullReport(
+        #[\SensitiveParameter] string $regon,
+        ReportType $reportType,
+    ): FullCompanyReportData {
         $this->calls[] = ['getFullReport', $regon, $reportType];
 
         return $this->report ?? throw new RuntimeException('Report not configured.');
     }
 
     /** @return list<FullCompanyReportData> */
-    public function getFullReports(string $regon, ReportType $reportType): array
-    {
+    public function getFullReports(
+        #[\SensitiveParameter] string $regon,
+        ReportType $reportType,
+    ): array {
         $this->calls[] = ['getFullReports', $regon, $reportType];
 
         return $this->configuredReports();
     }
 
-    public function getFullReportByNip(string $nip, ReportType $reportType): FullCompanyReportData
-    {
+    public function getFullReportByNip(
+        #[\SensitiveParameter] string $nip,
+        ReportType $reportType,
+    ): FullCompanyReportData {
         $this->calls[] = ['getFullReportByNip', $nip, $reportType];
 
         return $this->report ?? throw new RuntimeException('Report not configured.');
     }
 
     /** @return list<FullCompanyReportData> */
-    public function getFullReportsByNip(string $nip, ReportType $reportType): array
-    {
+    public function getFullReportsByNip(
+        #[\SensitiveParameter] string $nip,
+        ReportType $reportType,
+    ): array {
         $this->calls[] = ['getFullReportsByNip', $nip, $reportType];
 
         return $this->configuredReports();
     }
 
-    public function getFullReportByKrs(string $krs, ReportType $reportType): FullCompanyReportData
-    {
+    public function getFullReportByKrs(
+        #[\SensitiveParameter] string $krs,
+        ReportType $reportType,
+    ): FullCompanyReportData {
         $this->calls[] = ['getFullReportByKrs', $krs, $reportType];
 
         return $this->report ?? throw new RuntimeException('Report not configured.');
     }
 
     /** @return list<FullCompanyReportData> */
-    public function getFullReportsByKrs(string $krs, ReportType $reportType): array
-    {
+    public function getFullReportsByKrs(
+        #[\SensitiveParameter] string $krs,
+        ReportType $reportType,
+    ): array {
         $this->calls[] = ['getFullReportsByKrs', $krs, $reportType];
 
         return $this->configuredReports();

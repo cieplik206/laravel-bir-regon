@@ -73,7 +73,7 @@ it('accepts and rejects entity combinations according to the full report matrix'
             $unsupportedRegon,
         )))->toBeFalse();
 })->with([
-    'natural person' => [ReportType::NaturalPerson, EntityType::NaturalPerson, Silo::Ceidg, '012345678', EntityType::NaturalPerson, Silo::DeletedBefore20141108, '012345678'],
+    'natural person' => [ReportType::NaturalPerson, EntityType::NaturalPerson, Silo::Ceidg, '012345678', EntityType::LegalUnit, Silo::LegalUnits, '012345678'],
     'natural person CEIDG' => [ReportType::NaturalPersonCeidg, EntityType::NaturalPerson, Silo::Ceidg, '012345678', EntityType::NaturalPerson, Silo::Agriculture, '012345678'],
     'natural person agricultural activity' => [ReportType::NaturalPersonAgro, EntityType::NaturalPerson, Silo::Agriculture, '012345678', EntityType::NaturalPerson, Silo::Ceidg, '012345678'],
     'natural person other activity' => [ReportType::NaturalPersonOther, EntityType::NaturalPerson, Silo::Other, '012345678', EntityType::NaturalPerson, Silo::Agriculture, '012345678'],
@@ -90,6 +90,38 @@ it('accepts and rejects entity combinations according to the full report matrix'
     'organization local-unit activity' => [ReportType::OrganizationLocalActivity, EntityType::LegalUnitLocalUnit, Silo::LegalUnits, '01234567800001', EntityType::LegalUnit, Silo::LegalUnits, '012345678'],
     'organization partners' => [ReportType::OrganizationPartners, EntityType::LegalUnit, Silo::LegalUnits, '012345678', EntityType::LegalUnit, Silo::Other, '012345678'],
     'unit type' => [ReportType::UnitType, EntityType::LegalUnit, Silo::LegalUnits, '012345678', EntityType::LegalUnit, Silo::LegalUnits, '0123456780'],
+]);
+
+it('supports the general natural-person report for every natural-person silo', function (
+    Silo $silo,
+): void {
+    $result = reportTypeSearchResult(
+        EntityType::NaturalPerson,
+        $silo,
+        '012345678',
+    );
+
+    expect(ReportType::NaturalPerson->supports($result))->toBeTrue();
+})->with([
+    'CEIDG' => [Silo::Ceidg],
+    'agriculture' => [Silo::Agriculture],
+    'other' => [Silo::Other],
+    'deleted before 2014-11-08' => [Silo::DeletedBefore20141108],
+]);
+
+it('keeps activity and local-unit reports unavailable for the historical natural-person silo', function (
+    ReportType $reportType,
+): void {
+    $result = reportTypeSearchResult(
+        EntityType::NaturalPerson,
+        Silo::DeletedBefore20141108,
+        '012345678',
+    );
+
+    expect($reportType->supports($result))->toBeFalse();
+})->with([
+    'activity report' => [ReportType::NaturalPersonActivity],
+    'local-unit list' => [ReportType::NaturalPersonLocals],
 ]);
 
 it('supports the unit-type report for every documented entity type and REGON length', function (
