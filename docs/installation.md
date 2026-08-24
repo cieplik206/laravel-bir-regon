@@ -2,13 +2,6 @@
 
 # Installation
 
-> [!IMPORTANT]
-> This page describes the unreleased 2.x development line. The latest
-> published and supported stable line is 1.1.x. Do not apply the 2.x platform
-> requirements or examples to a 1.1.x installation; follow the
-> [documentation shipped with v1.1.1](https://github.com/cieplik206/laravel-bir-regon/tree/v1.1.1#readme)
-> instead.
-
 ## Requirements
 
 Laravel BIR REGON requires:
@@ -43,28 +36,11 @@ sandbox never share a handle.
 
 ## Install the package
 
-Install the currently published stable line with:
-
-```bash
-composer require cieplik206/laravel-bir-regon:^1.1
-```
-
-After 2.0.0 is published, install the version described by this documentation
-with:
+Install the current stable release with:
 
 ```bash
 composer require cieplik206/laravel-bir-regon:^2.0
 ```
-
-To test the unreleased line after the 2.x development branch is merged to
-`main`, opt in explicitly:
-
-```bash
-composer require cieplik206/laravel-bir-regon:dev-main --with-all-dependencies
-```
-
-Development branches are not stable release dependencies and should not be
-used in production.
 
 Laravel's package discovery registers
 `cieplik206\BirRegon\BirRegonServiceProvider` automatically. No changes to
@@ -122,10 +98,10 @@ BIR_PROXY_PASSWORD=proxy-password
 ```
 
 `BIR_PROXY_URL` accepts an `http` or `https` proxy. The credentials are optional,
-but the username and password must either both be present or both be absent.
-Keep them outside source control and prefer an `https://` proxy whenever they
-are configured: an `http://` client-to-proxy link is unencrypted, even though
-the TLS connection to GUS inside the CONNECT tunnel protects the SOAP exchange.
+but the username and password must either both be present or both be absent and
+are accepted only for `https://`. Anonymous `http://` proxies remain supported;
+authenticated ones fail before network access because their client-to-proxy
+link would be unencrypted. Keep credentials outside source control.
 The native sender continues to verify TLS for the GUS endpoint and requires
 TLS 1.2 or newer. For an HTTPS proxy, it applies the same minimum and verifies
 the proxy itself. See

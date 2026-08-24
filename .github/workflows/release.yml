@@ -1,13 +1,16 @@
 name: Release
 
+# repository_dispatch always loads this privileged workflow from the default
+# branch. A tag push would instead execute the workflow stored in the tagged
+# commit, allowing that commit to replace the verification steps below.
 on:
-  push:
-    tags:
-      - 'v*'
+  repository_dispatch:
+    types:
+      - publish-release
 
 permissions:
+  actions: read
   contents: write
-  checks: read
 
 concurrency:
   group: release
@@ -19,15 +22,42 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      RELEASE_TAG: ${{ github.ref_name }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      RELEASE_TAG: ${{ github.event.client_payload.tag }}
       GH_TOKEN: ${{ github.token }}
 
     steps:
-      - name: Check out tagged source
+      - name: Verify trusted workflow context
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_EVENT_NAME" != "repository_dispatch" ]]; then
+            echo "Releases must be requested through repository_dispatch." >&2
+            exit 1
+          fi
+
+          if [[ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]]; then
+            echo "The release publisher must execute from the default branch." >&2
+            exit 1
+          fi
+
+          if [[ "$GITHUB_ACTOR" != "$GITHUB_REPOSITORY_OWNER" ]]; then
+            echo "Only the repository owner may request a release." >&2
+            exit 1
+          fi
+
+          if [[ "$GITHUB_TRIGGERING_ACTOR" != "$GITHUB_REPOSITORY_OWNER" ]]; then
+            echo "Only the repository owner may trigger or re-run a release." >&2
+            exit 1
+          fi
+
+      - name: Check out the trusted default-branch commit
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ github.sha }}
 
       - name: Verify tag, signature, and main ancestry
         id: tag
@@ -50,6 +80,11 @@ jobs:
           tag_json="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_object_sha")"
           target_sha="$(jq -r '.object.sha' <<<"$tag_json")"
 
+          if [[ "$(jq -r '.tag' <<<"$tag_json")" != "$RELEASE_TAG" ]]; then
+            echo "The signed tag name does not match the requested release tag." >&2
+            exit 1
+          fi
+
           if [[ "$(jq -r '.object.type' <<<"$tag_json")" != "commit" ]]; then
             echo "Release tag must point directly to a commit." >&2
             exit 1
@@ -61,34 +96,63 @@ jobs:
             exit 1
           fi
 
+          remote_ref="refs/remotes/origin/$DEFAULT_BRANCH"
           git fetch --no-tags origin \
-            '+refs/heads/main:refs/remotes/origin/main'
-          if ! git merge-base --is-ancestor "$target_sha" origin/main; then
-            echo "Release tag must point to a commit reachable from main." >&2
+            "+refs/heads/$DEFAULT_BRANCH:$remote_ref"
+          if ! git merge-base --is-ancestor "$target_sha" "$remote_ref"; then
+            echo "Release tag must point to a commit reachable from the default branch." >&2
             exit 1
           fi
 
+          printf 'tag_object_sha=%s\n' "$tag_object_sha" >>"$GITHUB_OUTPUT"
           printf 'target_sha=%s\n' "$target_sha" >>"$GITHUB_OUTPUT"
 
-      - name: Require successful CI Passed check
+      - name: Require successful CI workflow run
         env:
           TARGET_SHA: ${{ steps.tag.outputs.target_sha }}
         shell: bash
         run: |
           set -euo pipefail
 
-          checks="$(gh api \
+          runs="$(gh api \
             -H 'Accept: application/vnd.github+json' \
-            "repos/$GITHUB_REPOSITORY/commits/$TARGET_SHA/check-runs?per_page=100")"
+            "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=push&status=completed&head_sha=$TARGET_SHA&per_page=100")"
+
+          ci_run="$(jq -c \
+            --arg branch "$DEFAULT_BRANCH" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg target "$TARGET_SHA" '
+              [.workflow_runs[] | select(
+                .path == ".github/workflows/ci.yml"
+                and .head_sha == $target
+                and .head_branch == $branch
+                and .event == "push"
+                and .status == "completed"
+                and .repository.full_name == $repository
+                and .head_repository.full_name == $repository
+              )]
+              | sort_by([.run_number, .run_attempt])
+              | last // empty
+            ' <<<"$runs")"
+
+          if [[ -z "$ci_run" ]] || [[ "$(jq -r '.conclusion' <<<"$ci_run")" != "success" ]]; then
+            echo "The tagged commit has no successful push run of .github/workflows/ci.yml on the default branch." >&2
+            exit 1
+          fi
+
+          ci_run_id="$(jq -r '.id' <<<"$ci_run")"
+          jobs="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$ci_run_id/jobs?filter=latest&per_page=100")"
 
           if ! jq -e '
-            [.check_runs[] | select(
+            [.jobs[] | select(
               .name == "CI Passed"
+              and .status == "completed"
               and .conclusion == "success"
-              and .app.id == 15368
-            )] | length > 0
-          ' <<<"$checks" >/dev/null; then
-            echo "The tagged commit has no successful CI Passed check from GitHub Actions." >&2
+            )] | length == 1
+          ' <<<"$jobs" >/dev/null; then
+            echo "The verified CI workflow run has no unique successful CI Passed job." >&2
             exit 1
           fi
 
@@ -117,12 +181,40 @@ jobs:
           cd dist
           sha256sum ./*.tar.gz ./*.zip >SHA256SUMS
 
-      - name: Publish immutable GitHub release
+      - name: Revalidate tag and publish immutable GitHub release
         env:
+          EXPECTED_TAG_OBJECT_SHA: ${{ steps.tag.outputs.tag_object_sha }}
           TARGET_SHA: ${{ steps.tag.outputs.target_sha }}
         shell: bash
         run: |
           set -euo pipefail
+
+          # Repeat every mutable remote-state check immediately before the
+          # write. The tag ruleset restricts mutation during this small API
+          # window, and immutable releases protect the result after creation.
+          ref_json="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG")"
+          if [[ "$(jq -r '.object.type' <<<"$ref_json")" != "tag" ]] \
+            || [[ "$(jq -r '.object.sha' <<<"$ref_json")" != "$EXPECTED_TAG_OBJECT_SHA" ]]; then
+            echo "The release tag ref changed after verification." >&2
+            exit 1
+          fi
+
+          tag_json="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$EXPECTED_TAG_OBJECT_SHA")"
+          if [[ "$(jq -r '.tag' <<<"$tag_json")" != "$RELEASE_TAG" ]] \
+            || [[ "$(jq -r '.object.type' <<<"$tag_json")" != "commit" ]] \
+            || [[ "$(jq -r '.object.sha' <<<"$tag_json")" != "$TARGET_SHA" ]] \
+            || [[ "$(jq -r '.verification.verified' <<<"$tag_json")" != "true" ]]; then
+            echo "The signed release tag no longer matches the verified release request." >&2
+            exit 1
+          fi
+
+          remote_ref="refs/remotes/origin/$DEFAULT_BRANCH"
+          git fetch --no-tags origin \
+            "+refs/heads/$DEFAULT_BRANCH:$remote_ref"
+          if ! git merge-base --is-ancestor "$TARGET_SHA" "$remote_ref"; then
+            echo "The release target is no longer reachable from the default branch." >&2
+            exit 1
+          fi
 
           gh release create "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \

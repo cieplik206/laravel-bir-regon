@@ -57,10 +57,17 @@ try {
 } catch (BirNotFoundException) {
     $diagnostics = BirRegon::diagnostics()->get();
     $safeMessage = preg_replace(
-        '/[\p{Cc}\p{Zl}\p{Zp}]/u',
+        '/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u',
         ' ',
         $diagnostics->message,
     ) ?? '[invalid GUS diagnostic message]';
+    $safeMessage = preg_match(
+        '/\A(?<message>.{0,1024})(?<more>.)?/us',
+        $safeMessage,
+        $parts,
+    ) === 1
+        ? $parts['message'].(($parts['more'] ?? '') === '' ? '' : '…')
+        : '[invalid GUS diagnostic message]';
 
     Log::warning('GUS BIR diagnostic', [
         'message_code' => $diagnostics->messageCode,
@@ -77,10 +84,12 @@ The response contains:
 
 Both the diagnostic `message` and the public service-status `message` are
 untrusted strings returned by GUS. Do not log either value directly: normalize
-CR, LF, and other control characters and prefer structured context, as above,
-to prevent log forging. They also require normal HTML escaping, parameterized
-SQL, validated URL/email handling, and spreadsheet formula protection when used
-in those contexts.
+CR, LF, Unicode format and bidirectional-control characters, and prefer
+structured context, as above, to prevent log forging. Bound the normalized
+message before writing it; the example keeps at most 1,024 Unicode code points
+and adds an ellipsis when more data is present. These strings also require
+normal HTML escaping, parameterized SQL, validated URL/email handling, and
+spreadsheet formula protection when used in those contexts.
 
 The native gateway reads these three values into one protocol
 `DiagnosticsSnapshot` using one captured SID. If that session expires while the

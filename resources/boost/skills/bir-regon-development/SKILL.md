@@ -203,6 +203,11 @@ reimplement report-key mapping in consuming applications.
 of eight characters, not an enum. Treat it as a forward-compatible GUS
 classification version identifier.
 
+Treat normalized `ActivityStatus` conservatively. `Active` requires a start or
+resumption date; when suspension is present, resumption must be strictly later.
+A partial row with only identity or historical metadata is `Unknown`; never
+infer current activity merely because termination fields are absent.
+
 `NaturalPersonActivityKindsData` contains nullable integer counts named
 `ceidgCount`, `agricultureCount`, `otherCount`, and
 `deletedBefore20141108Count`; never map them to booleans. Keep empty and
@@ -247,11 +252,13 @@ selection to request builders or instantiate one-off clients.
 Set `BIR_PROXY_URL` when both native environments must use an explicit
 corporate proxy. It accepts only `http` or `https`, a host, and an optional
 port. Never embed userinfo in the URL; set `BIR_PROXY_USERNAME` and
-`BIR_PROXY_PASSWORD` together when authentication is required. Explicit proxy
+`BIR_PROXY_PASSWORD` together when authentication is required, and use
+`https://` because authenticated `http://` proxy configuration is rejected.
+Explicit proxy
 routing uses CONNECT, does not honor an ambient `NO_PROXY` bypass, verifies the
 GUS target and an HTTPS proxy, and cannot be combined with a custom HTTP sender.
-Prefer an `https://` proxy for credentials; an `http://` client-to-proxy link
-is unencrypted even though target TLS inside CONNECT protects the SOAP exchange.
+Anonymous `http://` proxies remain supported, but their client-to-proxy link is
+unencrypted even though target TLS inside CONNECT protects the SOAP exchange.
 With `BIR_PROXY_URL` empty, preserve libcurl's ambient `HTTPS_PROXY` and
 `NO_PROXY` behavior. Do not disable TLS verification or expose proxy values in
 logs, exceptions, debug output, or serialized state.
@@ -261,6 +268,10 @@ Laravel enables the cache-backed request limiter by default. On
 retry or bypass the limiter. Read
 `vendor/cieplik206/laravel-bir-regon/docs/rate-limits.md` for configuration and
 request weights.
+
+`BIR_RATE_LIMIT_ENABLED` must resolve to the exact boolean `true` or `false`.
+Do not quote it or use `0`/`1`; malformed values fail closed instead of
+silently selecting the unlimited limiter.
 
 Direct `NativeSoapTransport` construction requires an explicit
 `BirRequestLimiterInterface`. Use `UnlimitedBirRequestLimiter` only when
@@ -355,12 +366,17 @@ application code:
 - validate an email address before creating a `mailto:` link;
 - before CSV/XLSX export, neutralize values beginning with `=`, `+`, `-`, `@`,
   TAB, or CR; CSV quoting alone does not prevent formula execution.
-- before logging, normalize CR, LF, and other control characters and prefer
-  structured context; never concatenate an unchanged GUS string into a log
-  line.
+- before logging, normalize CR, LF, Unicode format/bidirectional controls and
+  other control characters, bound the normalized length, and prefer structured
+  context; never concatenate an unchanged GUS string into a log line.
 
 Keep raw registry strings for fidelity, then apply output-context protection at
 the final HTML, database, link, mail, or spreadsheet boundary.
+
+Search builders and native `SearchCriteria` redact identifiers from dumps,
+exports, and serialization. A deserialized request object is intentionally an
+inert tombstone. Queue protected identifier inputs separately and rebuild a
+fresh builder when the job executes.
 
 ## Exceptions
 

@@ -89,6 +89,14 @@ of at most eight characters because the GUS XSD leaves this version identifier
 open for future classifications; it is deliberately not an enum. Missing
 components and fields stay `null`; list reports use empty lists.
 
+`ActivityStatus` is deliberately conservative. A termination, removal,
+bankruptcy, not-started marker, or an unresolved suspension produces
+`Inactive`. A start or resumption date can establish `Active`; when a
+suspension date is present, the resumption must be strictly later. When a
+partial report contains only identity or historical metadata and no positive
+lifecycle evidence, the status is `Unknown`; absence of an end date alone is
+never treated as proof that an entity is active.
+
 For the natural-person general report,
 `EntityDetailsData::$activityKinds` is a nullable
 `NaturalPersonActivityKindsData` with four nullable integer counts:
@@ -140,10 +148,11 @@ SQL-injection, URL, email, spreadsheet-injection, or log-forging boundary.
 - Before CSV or XLSX export, neutralize cells whose first character is `=`, `+`,
   `-`, `@`, TAB, or CR. Quoting a CSV cell alone does not stop formula
   evaluation; prefix or otherwise encode the value according to the exporter.
-- Before logging a GUS string, normalize CR, LF, and other control characters,
-  or place a normalized value in structured logging context. Never concatenate
-  an unchanged GUS message into a log line where it can forge additional
-  entries.
+- Before logging a GUS string, normalize CR, LF, Unicode
+  format/bidirectional controls, and other control characters, bound its
+  normalized length, or place a normalized value in structured logging
+  context. Never concatenate an unchanged GUS message into a log line where it
+  can forge additional entries.
 
 ## `BulkReportData`
 

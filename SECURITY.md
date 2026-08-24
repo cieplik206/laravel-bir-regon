@@ -20,17 +20,17 @@ sandbox values.
 
 ## Supported versions
 
-The latest `1.1.x` release is the currently supported stable line. Work on the
-next `2.x` release is active but unpublished and must not be treated as a
-released replacement for `1.1.x`. Security fixes are accepted for both the
-supported stable line and active `2.x` development.
+The latest `2.x` release is the supported stable line. The latest `1.1.x`
+release remains eligible for security fixes during a three-month migration
+period ending on 2026-11-24. This eligibility is a best-effort maintenance
+policy, not a service-level commitment.
 
 | Version | Supported |
 | --- | --- |
-| 2.x (unreleased) | Development only |
-| Latest 1.1.x release | Yes |
+| Latest 2.x release | Yes |
+| Latest 1.1.x release | Security fixes through 2026-11-24 |
 | 1.0.x and older | No |
 
-This policy must be updated when `2.0.0` is published. That update should state
-the support status and any end-of-life or migration period for the `1.1.x`
-line instead of assuming that publication alone ends its support.
+Users of version 1 should migrate to version 2 before 2026-11-24. See the
+[2.0 upgrade guide](UPGRADE-2.0.md) for the breaking changes and required
+platform upgrade.

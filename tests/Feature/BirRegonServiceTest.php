@@ -84,6 +84,16 @@ it('routes sandbox queries through the stable sandbox client', function (): void
         ]);
 });
 
+it('rejects using one client instance for production and sandbox', function (): void {
+    $client = new StubBirClient;
+
+    expect(fn () => new BirRegonService($client, $client))
+        ->toThrow(
+            InvalidArgumentException::class,
+            'Production and sandbox BIR clients must be different instances.',
+        );
+});
+
 it('fetches a full report after searching by NIP', function (): void {
     $company = makeCompanyData(['regon' => '111222333']);
     $reportData = [['praw_regon9' => $company->regon]];

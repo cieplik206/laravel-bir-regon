@@ -123,7 +123,7 @@ class BirRegonServiceProvider extends ServiceProvider
         Environment $environment,
         #[\SensitiveParameter] string $apiKey,
     ): BirRequestLimiterInterface {
-        if (! (bool) config('bir-regon.rate_limit.enabled', true)) {
+        if (! self::rateLimitEnabled()) {
             return new UnlimitedBirRequestLimiter;
         }
 
@@ -137,6 +137,17 @@ class BirRegonServiceProvider extends ServiceProvider
             apiKey: $apiKey,
             prefix: is_string($prefix) ? $prefix : 'bir-regon:rate-limit',
         );
+    }
+
+    private static function rateLimitEnabled(): bool
+    {
+        $value = config('bir-regon.rate_limit.enabled', true);
+
+        if (! is_bool($value)) {
+            throw new LogicException('BIR rate limiting enabled setting must be a boolean.');
+        }
+
+        return $value;
     }
 
     private static function maxResponseBytes(): int

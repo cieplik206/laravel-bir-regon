@@ -267,6 +267,66 @@ it('isolates persistent handles between sender instances', function (): void {
         ->and($handleIds[1])->not->toBe($handleIds[0]);
 });
 
+it('bounds the lifetime of reusable connections when libcurl supports it', function (): void {
+    $optionSets = [];
+    $setter = new class($optionSets) implements CurlOptionSetterInterface
+    {
+        /** @param list<array<int, mixed>> $optionSets */
+        public function __construct(public array &$optionSets) {}
+
+        public function setMany(
+            CurlHandle $handle,
+            #[SensitiveParameter] array $options,
+        ): bool {
+            unset($handle);
+            $this->optionSets[] = $options;
+
+            return true;
+        }
+
+        public function set(
+            CurlHandle $handle,
+            int $option,
+            #[SensitiveParameter] mixed $value,
+        ): bool {
+            unset($handle, $option, $value);
+
+            return true;
+        }
+    };
+    $executor = new class implements CurlExecutorInterface
+    {
+        public function execute(
+            CurlHandle $handle,
+            #[SensitiveParameter] array $headers,
+            #[SensitiveParameter] string $body,
+        ): bool {
+            unset($handle, $headers, $body);
+
+            return false;
+        }
+    };
+    $sender = new CurlBirHttpSender(
+        environment: Environment::Sandbox,
+        connectionTimeout: 1,
+        requestTimeout: 1,
+        maxResponseBytes: 1024,
+        userAgent: 'laravel-bir-regon-tests/2',
+        executor: $executor,
+        optionSetter: $setter,
+    );
+
+    $sender->send(BirOperation::Login, '<soap:Envelope/>', null);
+
+    expect($optionSets)->toHaveCount(1);
+
+    if (defined('CURLOPT_MAXLIFETIME_CONN')) {
+        $option = constant('CURLOPT_MAXLIFETIME_CONN');
+
+        expect($optionSets[0][$option])->toBe(300);
+    }
+});
+
 it('reapplies explicit proxy routing after every handle reset while preserving target TLS verification', function (): void {
     $observed = [
         'setMany' => [],

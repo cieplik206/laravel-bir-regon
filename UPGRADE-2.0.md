@@ -15,22 +15,18 @@ Version 2 requires PHP 8.4 or newer, Laravel 13, and these PHP extensions:
 - `ext-curl`
 - `ext-libxml`
 
-PHP 8.3 and Laravel 12 remain supported by the 1.x package line but are not
-supported by version 2. Upgrade the application platform before changing the
-package constraint to `^2.0`.
+PHP 8.3 and Laravel 12 remain available on the 1.x package line but are not
+supported by version 2. Security-fix eligibility for the latest 1.1.x release
+ends on 2026-11-24; see [SECURITY.md](SECURITY.md). Upgrade the application
+platform before changing the package constraint to `^2.0`.
 
 SimpleXML and PHP's SOAP extension are no longer used by the package. The native
 transport uses libcurl with verified HTTPS, a total request deadline, and a
-streaming response limit. After 2.0.0 is published, update the dependency and
-its lock file with:
+streaming response limit. Update the dependency and its lock file with:
 
 ```bash
 composer require cieplik206/laravel-bir-regon:^2.0 --with-all-dependencies
 ```
-
-Before the release, maintainers may test the 2.x code after it is merged to
-`main` by explicitly requiring `dev-main`. Do not replace a stable production
-constraint with a development branch.
 
 `gusapi/gusapi` is no longer installed by Laravel BIR REGON. If the consuming
 application declared it directly and does not use it elsewhere, remove that
@@ -47,7 +43,7 @@ the native transport settings to a published `config/bir-regon.php` file:
 'max_response_bytes' => env('BIR_MAX_RESPONSE_BYTES', 10_000_000),
 'user_agent' => env('BIR_USER_AGENT', 'laravel-bir-regon/2'),
 'rate_limit' => [
-    'enabled' => (bool) env('BIR_RATE_LIMIT_ENABLED', true),
+    'enabled' => env('BIR_RATE_LIMIT_ENABLED', true),
     'store' => env('BIR_RATE_LIMIT_STORE'),
     'prefix' => env('BIR_RATE_LIMIT_PREFIX', 'bir-regon:rate-limit'),
 ],
@@ -66,7 +62,10 @@ Laravel client is resolved.
 
 The native sender also requires TLS 1.2 or newer for the GUS endpoint and for
 an HTTPS proxy, whether that proxy is configured explicitly or discovered by
-libcurl. A custom sender owns and must enforce its own TLS policy.
+libcurl. Explicit proxy credentials now require an `https://` proxy URL;
+authenticated `http://` proxy configuration fails before network access,
+while anonymous HTTP proxy routing remains available. A custom sender owns and
+must enforce its own TLS and proxy-credential policy.
 
 Laravel-resolved clients now enable a distributed, cache-backed GUS request
 limiter by default. `CacheBirRequestLimiter` accepts only the exact base
@@ -110,6 +109,11 @@ or hour blocker plus clock-rollback recovery, rounded up. Use
 requires a `BirRequestLimiterInterface`; there is no implicit unlimited
 fallback.
 
+The enabled value must be an actual PHP boolean. Use Laravel's standard
+unquoted dotenv values `true` or `false`; empty, numeric, quoted, or malformed
+values now raise `LogicException` instead of being coerced into a silent
+limiter opt-out.
+
 ## 3. Replace custom GUS factories
 
 `GusApiFactory` and `GusApiFactoryInterface` have been removed. Choose the new
@@ -150,11 +154,19 @@ violation should return
 `TransportResponse::failure(TransportFailureType::Protocol, resultWasNil: true)`
 to prevent session recovery from obscuring the protocol error.
 
+Fluent search builders and low-level `SearchCriteria` objects now also omit
+their identifier values from dumps, exports, and serialized state. A restored
+object is an inert tombstone and cannot issue a request. Queue protected input
+values separately and construct a fresh builder or criterion at execution time.
+
 The default gateway, transport, and client bindings customize the production
 graph. `BirRegon::sandbox()` deliberately uses a separate native graph so a
 production extension cannot receive the sandbox credential or session. Replace
 `BirRegonService` as a whole when an application also needs custom sandbox
-behavior.
+behavior. Manual `BirRegonService` construction must use different client
+instances for production and sandbox; passing the same object for both now
+raises `InvalidArgumentException` instead of silently routing `sandbox()` to
+production.
 
 Bindings should use Laravel's scoped lifetime:
 
@@ -237,6 +249,12 @@ state uses `ActivityStatus`, and PKD classification is a nullable string of at
 most eight characters. It remains open rather than becoming an enum so future
 GUS classification versions do not require a package release.
 
+Activity-state inference now fails closed for partial reports. `Active`
+requires a start or resumption date; if a suspension date is present, the
+resumption must be strictly later. Identity fields, historical
+creation/registration/change dates, or merely missing termination fields
+produce `Unknown`.
+
 `NaturalPersonActivityKindsData` now exposes nullable integer counts:
 `ceidgCount`, `agricultureCount`, `otherCount`, and
 `deletedBefore20141108Count`. Do not migrate them as booleans. Empty and
@@ -251,9 +269,9 @@ and normalized reports, `DiagnosticsData::$message`, and
 this), use bound SQL parameters, allowlist only `http`/`https` links, validate
 addresses before creating `mailto:` links, and neutralize formula prefixes such
 as `=`, `+`, `-`, `@`, tab, and carriage return for CSV/XLSX. Normalize CR, LF,
-and other control characters or use normalized structured context before
-logging to prevent log forging. Mapping preserves source values; it is not a
-sanitizer.
+Unicode format/bidirectional controls, and other control characters, and bound
+message length or use normalized structured context before logging to prevent
+log forging. Mapping preserves source values; it is not a sanitizer.
 
 ## 6. Review report enums
 
@@ -444,9 +462,12 @@ ended separately through `BirRegon::sandbox()->logout()`.
 
 The cURL sender now resets and reuses one handle within its scoped transport.
 This preserves libcurl connection, DNS, and TLS session caches while replacing
-request headers, body, callbacks, and SID after every call. Custom transports
-should offer equivalent isolation if they introduce their own connection
-pooling.
+request headers, body, callbacks, and SID after every call, and caps reusable
+connection age at five minutes where libcurl supports it. Cloning
+`NativeSoapTransport` also isolates its mutable SOAP envelope builder so SID
+changes cannot split header and body session state. Custom transports should
+offer equivalent isolation if they introduce their own connection pooling or
+clone behavior.
 
 ## 11. Verify the upgrade
 

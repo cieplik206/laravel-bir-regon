@@ -116,6 +116,13 @@ final class NativeSoapTransport implements BirEnvironmentAwareTransportInterface
         $this->envelopeBuilder->useSession($sessionId);
     }
 
+    public function __clone(): void
+    {
+        // The builder carries the SID used in operation bodies. Keep that
+        // mutable state isolated from the cloned transport's SID header.
+        $this->envelopeBuilder = clone $this->envelopeBuilder;
+    }
+
     public function call(
         BirOperation $operation,
         #[\SensitiveParameter] array $parameters = [],

@@ -4,16 +4,19 @@ declare(strict_types=1);
 
 namespace cieplik206\BirRegon\Transport;
 
+use cieplik206\BirRegon\Concerns\PreventsSerialization;
 use cieplik206\BirRegon\Protocol\RawTransportResult;
 use CurlHandle;
+use SensitiveParameterValue;
 
 /** @internal */
 final class CurlResponseBuffer
 {
+    use PreventsSerialization;
+
     private const MAX_HEADER_BYTES = 65_536;
 
-    /** @var list<string> */
-    private array $bodyChunks = [];
+    private SensitiveParameterValue $bodyBuffer;
 
     private int $bodyBytes = 0;
 
@@ -28,13 +31,24 @@ final class CurlResponseBuffer
 
     private bool $overflow = false;
 
+    private ?RawTransportResult $resolvedResult = null;
+
     private ?int $statusCode = null;
 
-    public function __construct(private readonly int $maxResponseBytes) {}
+    public function __construct(private readonly int $maxResponseBytes)
+    {
+        $this->bodyBuffer = new SensitiveParameterValue('');
+    }
 
     public function writeHeader(CurlHandle $handle, #[\SensitiveParameter] string $line): int
     {
+        $this->ensureNotRestoredFromSerialization();
         unset($handle);
+
+        if ($this->resolvedResult !== null) {
+            return 0;
+        }
+
         $lineLength = strlen($line);
         $this->headerBytes += $lineLength;
 
@@ -145,7 +159,13 @@ final class CurlResponseBuffer
 
     public function writeBody(CurlHandle $handle, #[\SensitiveParameter] string $chunk): int
     {
+        $this->ensureNotRestoredFromSerialization();
         unset($handle);
+
+        if ($this->resolvedResult !== null) {
+            return 0;
+        }
+
         $chunkLength = strlen($chunk);
 
         if ($chunkLength > $this->maxResponseBytes - $this->bodyBytes) {
@@ -154,7 +174,20 @@ final class CurlResponseBuffer
             return 0;
         }
 
-        $this->bodyChunks[] = $chunk;
+        $body = $this->bodyBuffer->getValue();
+
+        // Drop the wrapper that still references the old string before
+        // appending, so PHP can grow the sole remaining string in place.
+        $this->bodyBuffer = new SensitiveParameterValue('');
+
+        if (! is_string($body)) {
+            $this->invalid = true;
+
+            return 0;
+        }
+
+        $body .= $chunk;
+        $this->bodyBuffer = new SensitiveParameterValue($body);
         $this->bodyBytes += $chunkLength;
 
         return $chunkLength;
@@ -162,6 +195,12 @@ final class CurlResponseBuffer
 
     public function result(): RawTransportResult
     {
+        $this->ensureNotRestoredFromSerialization();
+
+        if ($this->resolvedResult !== null) {
+            return $this->resolvedResult;
+        }
+
         $contentType = $this->headers['content-type'] ?? null;
 
         if (
@@ -170,14 +209,21 @@ final class CurlResponseBuffer
             || ! $this->headersComplete
             || $this->statusCode === null
         ) {
-            return RawTransportResult::failure();
+            return $this->resolve(RawTransportResult::failure());
         }
 
-        return RawTransportResult::completed(
-            implode('', $this->bodyChunks),
+        $body = $this->bodyBuffer->getValue();
+        $this->bodyBuffer = new SensitiveParameterValue('');
+
+        if (! is_string($body) || strlen($body) !== $this->bodyBytes) {
+            return $this->resolve(RawTransportResult::failure());
+        }
+
+        return $this->resolve(RawTransportResult::completed(
+            $body,
             $contentType,
             $this->statusCode,
-        );
+        ));
     }
 
     /** @return array<string, string> */
@@ -187,5 +233,16 @@ final class CurlResponseBuffer
             'body' => '[REDACTED]',
             'status' => $this->statusCode === null ? '[NONE]' : (string) $this->statusCode,
         ];
+    }
+
+    private function resolve(RawTransportResult $result): RawTransportResult
+    {
+        $this->resolvedResult = $result;
+        $this->bodyBuffer = new SensitiveParameterValue('');
+        $this->bodyBytes = 0;
+        $this->headers = [];
+        $this->headerBytes = 0;
+
+        return $result;
     }
 }

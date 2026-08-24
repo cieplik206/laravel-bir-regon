@@ -96,7 +96,7 @@ BIR_RATE_LIMIT_PREFIX=bir-regon:rate-limit
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `BIR_RATE_LIMIT_ENABLED` | `true` | Uses the cache-backed limiter in the Laravel integration |
+| `BIR_RATE_LIMIT_ENABLED` | `true` | Uses the cache-backed limiter in the Laravel integration; accepts only the exact booleans `true` or `false` |
 | `BIR_RATE_LIMIT_STORE` | The application's default cache store | Selects a named Laravel cache store |
 | `BIR_RATE_LIMIT_PREFIX` | `bir-regon:rate-limit` | Separates package state from other cache keys |
 
@@ -117,6 +117,11 @@ of cache and lock semantics that have not been verified together. An
 application with another backend must provide its own
 `BirRequestLimiterInterface` implementation and pass it to
 `NativeSoapTransport`, or replace the transport.
+
+The published `rate_limit.enabled` value must resolve to a PHP boolean. Laravel
+parses the standard unquoted dotenv values `true` and `false` accordingly.
+Empty, numeric, quoted, or otherwise malformed values raise `LogicException`
+instead of being coerced into an accidental opt-out.
 
 The atomic lock has a 30-second lease. Acquisition waits for contention for at
 most one second, verifies ownership around the state write, and fails closed

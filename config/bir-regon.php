@@ -16,7 +16,7 @@ return [
         'password' => env('BIR_PROXY_PASSWORD'),
     ],
     'rate_limit' => [
-        'enabled' => (bool) env('BIR_RATE_LIMIT_ENABLED', true),
+        'enabled' => env('BIR_RATE_LIMIT_ENABLED', true),
         'store' => env('BIR_RATE_LIMIT_STORE'),
         'prefix' => env('BIR_RATE_LIMIT_PREFIX', 'bir-regon:rate-limit'),
     ],

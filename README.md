@@ -4,13 +4,6 @@ A fluent Laravel client for the Polish GUS BIR/REGON SOAP API.
 
 **[Read the full documentation →](https://cieplik206.github.io/laravel-bir-regon/)**
 
-> [!IMPORTANT]
-> This branch documents the unreleased 2.x development line. The latest
-> published and supported stable line is 1.1.x. Until 2.0.0 is released, the
-> 2.x requirements and API below are not the API installed by an unqualified
-> `composer require` command. Production users should follow the
-> [documentation shipped with v1.1.1](https://github.com/cieplik206/laravel-bir-regon/tree/v1.1.1#readme).
-
 Use a Laravel facade or dependency injection to search businesses by NIP,
 REGON, or KRS, retrieve full and bulk reports, and inspect the current GUS
 service status. Search items and report payloads are returned as typed
@@ -61,24 +54,10 @@ or Laravel 12 should remain on the 1.x package line.
 
 ## Installation
 
-For the currently published stable line, use:
-
-```bash
-composer require cieplik206/laravel-bir-regon:^1.1
-```
-
-After 2.0.0 is published, install the version documented on this branch with:
+Install the current stable release with:
 
 ```bash
 composer require cieplik206/laravel-bir-regon:^2.0
-```
-
-Maintainers testing the unreleased 2.x code after it is merged to `main` may
-explicitly require `dev-main`; do not use a development branch as a production
-dependency.
-
-```bash
-composer require cieplik206/laravel-bir-regon:dev-main --with-all-dependencies
 ```
 
 Add your BIR API key to `.env`:
@@ -116,8 +95,9 @@ BIR_PROXY_PASSWORD=proxy-password
 ```
 
 Proxy credentials are optional, but the username and password must be set
-together. Prefer an `https://` proxy whenever credentials are configured; an
-`http://` proxy link is not protected by TLS. See the
+together and are accepted only with an `https://` proxy. Anonymous `http://`
+proxies remain supported, but their client-to-proxy link is not protected by
+TLS. See the
 [configuration guide](https://cieplik206.github.io/laravel-bir-regon/configuration.html#http-proxy)
 for validation, TLS, and ambient proxy behavior.
 
@@ -241,8 +221,9 @@ including when GUS returns an error.
 Queued jobs should store only operation inputs such as a NIP, REGON, or KRS,
 then resolve `BirRegonService` in `handle()`. Do not store `BirClient`,
 `BirRegonService`, or a request builder on a job. Their serialized form
-intentionally omits all state, including credentials. Deserialization produces
-an inert tombstone that throws `LogicException` when used.
+intentionally omits all state, including credentials and identifiers.
+Deserialization produces an inert tombstone that throws `LogicException` when
+used.
 See [error handling](https://cieplik206.github.io/laravel-bir-regon/error-handling.html#queued-jobs-and-serialization)
 for an example.
 
@@ -250,8 +231,9 @@ Every public string received from GUS is untrusted, including `CompanyData`,
 raw and normalized report data, `DiagnosticsData::$message`, and
 `ServiceStatusData::$message`. Mapping does not sanitize it. Escape HTML, bind
 SQL values, allowlist `http`/`https` links, validate `mailto:` addresses,
-neutralize CSV/XLSX formula prefixes, and normalize control characters before
-logging to prevent log forging. See
+neutralize CSV/XLSX formula prefixes, and normalize control plus Unicode
+format/bidirectional characters and bound length before logging to prevent log
+forging. See
 [Data objects](https://cieplik206.github.io/laravel-bir-regon/data-objects.html#untrusted-gus-data).
 
 ## Documentation
@@ -329,6 +311,18 @@ Please see the [changelog](CHANGELOG.md) for information about recent changes.
 ## Contributing
 
 Please see [Contributing](CONTRIBUTING.md) for details.
+
+## Maintenance and support
+
+This package was created for and is used in the maintainer's own projects. It
+is shared publicly in case it is useful to other Laravel developers and is
+maintained on a best-effort basis. There is no commercial support, SLA,
+guaranteed response time, or commitment to implement requested changes.
+
+Bug reports and focused pull requests are welcome, but opening an issue does
+not guarantee a response or fix. See the [support policy](SUPPORT.md) for the
+full maintenance expectations. Suspected vulnerabilities must instead follow
+the private process in [SECURITY.md](SECURITY.md).
 
 ## Security
 

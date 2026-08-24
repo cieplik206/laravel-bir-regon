@@ -122,6 +122,26 @@ it('allows the Laravel cache-backed limiter to be disabled explicitly', function
         ->toBeInstanceOf(UnlimitedBirRequestLimiter::class);
 });
 
+it('fails closed for non-boolean rate limiter configuration', function (mixed $value): void {
+    config()->set('bir-regon.rate_limit.enabled', $value);
+
+    expect(fn () => app(BirSoapTransportInterface::class))
+        ->toThrow(
+            LogicException::class,
+            'BIR rate limiting enabled setting must be a boolean.',
+        );
+})->with([
+    'null' => null,
+    'empty string' => '',
+    'integer zero' => 0,
+    'integer one' => 1,
+    'string zero' => '0',
+    'string one' => '1',
+    'string false' => 'false',
+    'string true' => 'true',
+    'array' => [[true]],
+]);
+
 it('passes one explicit HTTP proxy configuration to both native environments', function (): void {
     $proxyUrl = 'https://proxy.example.test:8443';
     $proxyUsername = 'proxy-user';
@@ -209,6 +229,12 @@ it('fails closed for invalid explicit HTTP proxy configuration', function (
         'proxy-user',
         null,
         'BIR proxy username and password must be configured together.',
+    ],
+    'credentials over cleartext HTTP' => [
+        'http://proxy.example.test:8080',
+        'proxy-user',
+        'proxy-password',
+        'BIR proxy credentials require an HTTPS proxy URL.',
     ],
     'non-string URL' => [
         ['https://proxy.example.test:8443'],

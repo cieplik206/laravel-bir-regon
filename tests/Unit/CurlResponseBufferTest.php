@@ -226,3 +226,71 @@ it('accepts irrelevant HTTP extension headers with every legal token character',
     'underscore' => ['X_Test'],
     'punctuation' => ['X!Trace~Value'],
 ]);
+
+it('does not export or serialize buffered response data and releases completed chunks', function (): void {
+    $secretBody = '<soap:Envelope>RESPONSE-SID-SENTINEL</soap:Envelope>';
+    [$buffer, $handle] = preparedCurlResponseBuffer(strlen($secretBody), [
+        'Content-Type: application/soap+xml',
+        'Content-Length: '.strlen($secretBody),
+    ]);
+
+    expect($buffer->writeBody($handle, $secretBody))->toBe(strlen($secretBody));
+
+    foreach ([print_r($buffer, true), var_export($buffer, true), serialize($buffer)] as $rendered) {
+        expect($rendered)->not->toContain('RESPONSE-SID-SENTINEL');
+    }
+
+    $storedBuffer = (new ReflectionProperty($buffer, 'bodyBuffer'))->getValue($buffer);
+
+    expect($storedBuffer)->toBeInstanceOf(SensitiveParameterValue::class);
+
+    $result = $buffer->result();
+    $releasedBuffer = (new ReflectionProperty($buffer, 'bodyBuffer'))->getValue($buffer);
+
+    expect($result->body())->toBe($secretBody)
+        ->and($buffer->result())->toBe($result)
+        ->and($releasedBuffer)->toBeInstanceOf(SensitiveParameterValue::class)
+        ->and($releasedBuffer->getValue())->toBe('')
+        ->and($buffer->writeBody($handle, 'late-data'))->toBe(0);
+
+    foreach ([print_r($buffer, true), var_export($buffer, true), serialize($buffer)] as $rendered) {
+        expect($rendered)->not->toContain('RESPONSE-SID-SENTINEL');
+    }
+});
+
+it('buffers many tiny cURL chunks without per-chunk memory amplification', function (): void {
+    $chunkCount = 250_000;
+    [$buffer, $handle] = preparedCurlResponseBuffer($chunkCount, [
+        'Content-Type: application/soap+xml',
+        'Content-Length: '.$chunkCount,
+    ]);
+    $memoryBefore = memory_get_usage();
+    $warnings = [];
+    $handlerInstalled = false;
+
+    try {
+        set_error_handler(static function (int $severity, string $message) use (&$warnings): bool {
+            $warnings[] = [$severity, $message, debug_backtrace()];
+
+            return true;
+        });
+        $handlerInstalled = true;
+
+        for ($chunk = 0; $chunk < $chunkCount; $chunk++) {
+            if ($buffer->writeBody($handle, 'A') !== 1) {
+                throw new RuntimeException('The response buffer rejected a valid body chunk.');
+            }
+        }
+    } finally {
+        if ($handlerInstalled) {
+            restore_error_handler();
+        }
+    }
+
+    $memoryIncrease = memory_get_usage() - $memoryBefore;
+    $result = $buffer->result();
+
+    expect($memoryIncrease)->toBeLessThan(8_000_000)
+        ->and($warnings)->toBe([])
+        ->and($result->body())->toBe(str_repeat('A', $chunkCount));
+});

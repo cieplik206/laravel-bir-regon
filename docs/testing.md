@@ -79,14 +79,34 @@ from isolated checks because it depends on an external service.
 
 Create releases only from a commit already merged into `main` with a successful
 `CI Passed` check. Create and push a signed annotated SemVer tag such as
-`v2.0.0`. The protected tag push triggers the `Release` workflow. It verifies
-the tag signature, confirms that the tagged commit is reachable from `main`,
-and checks the GitHub Actions `CI Passed` result before publishing.
+`v2.0.0`. A tag push alone does not publish anything. After the protected tag
+exists remotely, the repository owner deliberately requests publication:
+
+```bash
+gh api --method POST \
+  repos/cieplik206/laravel-bir-regon/dispatches \
+  -f event_type=publish-release \
+  -F 'client_payload[tag]=v2.0.0'
+```
+
+The `repository_dispatch` event loads the privileged `Release` workflow from
+the trusted default branch instead of from the tagged commit. The workflow
+binds the requested ref to the signed annotated tag's internal name and target,
+confirms that the commit is reachable from `main`, and requires a successful
+push run of the exact `.github/workflows/ci.yml` at that SHA, including its
+unique `CI Passed` job. It rechecks the remote tag object and ancestry
+immediately before publishing.
 
 The workflow attaches source archives and `SHA256SUMS` to the GitHub Release.
 Repository release immutability freezes the published tag and assets and gives
 the release a GitHub provenance attestation. Tag creation and release
 publication remain deliberate maintainer operations.
+
+The owner-only dispatch is the current manual gate. If the repository gains a
+second trusted maintainer, add a protected `release` environment to the job,
+require that independent reviewer, and prevent self-approval. An unprotected
+environment or an approval performed by the same compromised owner would not
+add meaningful protection.
 
 ## GUS sandbox tests
 

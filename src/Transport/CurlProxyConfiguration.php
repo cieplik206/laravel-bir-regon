@@ -47,11 +47,17 @@ final class CurlProxyConfiguration
             return null;
         }
 
-        self::validateUrl($url);
+        $scheme = self::validateUrl($url);
 
         if (($username === null) !== ($password === null)) {
             throw new InvalidArgumentException(
                 'BIR proxy username and password must be configured together.',
+            );
+        }
+
+        if ($username !== null && $scheme !== 'https') {
+            throw new InvalidArgumentException(
+                'BIR proxy credentials require an HTTPS proxy URL.',
             );
         }
 
@@ -120,7 +126,7 @@ final class CurlProxyConfiguration
         ];
     }
 
-    private static function validateUrl(#[\SensitiveParameter] string $url): void
+    private static function validateUrl(#[\SensitiveParameter] string $url): string
     {
         if (preg_match('/[\x00-\x20\x7F]/', $url) === 1) {
             throw new InvalidArgumentException('BIR proxy URL is invalid.');
@@ -161,6 +167,8 @@ final class CurlProxyConfiguration
                 'BIR proxy URL must contain only a scheme, host, and optional port.',
             );
         }
+
+        return strtolower((string) $parts['scheme']);
     }
 
     private static function nullIfEmpty(?string $value): ?string

@@ -37,9 +37,9 @@ BIR_RATE_LIMIT_PREFIX=bir-regon:rate-limit
 | `BIR_USER_AGENT` | 1-200 printable ASCII characters | `laravel-bir-regon/2` | Identifies the package transport to GUS |
 | `BIR_IDENTIFIER_VALIDATION` | `format` or `checksum` | `format` | Selects local NIP and REGON validation before gateway access |
 | `BIR_PROXY_URL` | `http://` or `https://` URL containing only a host and optional port | Empty | Routes production and sandbox HTTPS traffic through an explicit proxy |
-| `BIR_PROXY_USERNAME` | String without surrounding whitespace or control characters | Empty | Authenticates to the explicit proxy |
-| `BIR_PROXY_PASSWORD` | String without surrounding whitespace or control characters | Empty | Authenticates to the explicit proxy |
-| `BIR_RATE_LIMIT_ENABLED` | Laravel boolean | `true` | Enables shared cache-backed request limiting |
+| `BIR_PROXY_USERNAME` | String without surrounding whitespace or control characters; requires an `https://` proxy | Empty | Authenticates to the explicit proxy |
+| `BIR_PROXY_PASSWORD` | String without surrounding whitespace or control characters; requires an `https://` proxy | Empty | Authenticates to the explicit proxy |
+| `BIR_RATE_LIMIT_ENABLED` | Exact boolean `true` or `false` | `true` | Enables shared cache-backed request limiting |
 | `BIR_RATE_LIMIT_STORE` | A configured Laravel cache store name | Default cache store | Selects the limiter state and lock backend |
 | `BIR_RATE_LIMIT_PREFIX` | 1-100 ASCII letters, digits, `:`, `_`, or `-` | `bir-regon:rate-limit` | Namespaces limiter cache entries |
 
@@ -73,7 +73,7 @@ return [
         'password' => env('BIR_PROXY_PASSWORD'),
     ],
     'rate_limit' => [
-        'enabled' => (bool) env('BIR_RATE_LIMIT_ENABLED', true),
+        'enabled' => env('BIR_RATE_LIMIT_ENABLED', true),
         'store' => env('BIR_RATE_LIMIT_STORE'),
         'prefix' => env('BIR_RATE_LIMIT_PREFIX', 'bir-regon:rate-limit'),
     ],
@@ -91,6 +91,12 @@ inactivity. The same byte limit applies while streaming the outer HTTP body and
 again when decoding the nested report XML. Direct `NativeSoapTransport`
 construction enforces the same ranges and rejects invalid values with
 `InvalidArgumentException`.
+
+Multipart SOAP responses are additionally limited to 32 MIME parts. Each part
+may contain at most 8,192 header bytes and 32 headers, and a parsed
+`Content-Type` may contain at most 16 parameters. Excessive or control-bearing
+MIME metadata is rejected as a protocol failure before unbounded header or part
+collections are materialized.
 
 ## Identifier validation
 
@@ -133,17 +139,14 @@ BIR_PROXY_USERNAME=proxy-user
 BIR_PROXY_PASSWORD=proxy-password
 ```
 
-The username and password must be configured together. Empty credentials mean
-an unauthenticated proxy. Proxy configuration applies equally to the isolated
-production and sandbox native transports. The sender forces an HTTP CONNECT
-tunnel and explicit routing, so an ambient `NO_PROXY` value does not bypass an
-explicit `BIR_PROXY_URL`.
-
-Prefer an `https://` proxy whenever credentials are configured. The TLS
-connection to GUS inside the CONNECT tunnel protects the SOAP exchange, but it
-does not add TLS to the client-to-proxy link itself. With an `http://` proxy
-that link is unencrypted, and a proxy that selects Basic authentication can
-receive the credentials without transport encryption.
+The username and password must be configured together and require an
+`https://` proxy URL. An authenticated `http://` proxy is rejected before any
+network access so credentials cannot be negotiated over an unencrypted
+client-to-proxy connection. Anonymous `http://` proxies remain supported.
+Proxy configuration applies equally to the isolated production and sandbox
+native transports. The sender forces an HTTP CONNECT tunnel and explicit
+routing, so an ambient `NO_PROXY` value does not bypass an explicit
+`BIR_PROXY_URL`.
 
 TLS peer and hostname verification remains enabled for the GUS target, with
 TLS 1.2 as the minimum protocol version. When the proxy URL uses `https`, its
@@ -167,6 +170,11 @@ Laravel stores: `ArrayStore`, `DatabaseStore`, `FileStore`, `MemcachedStore`, or
 `FailoverStore`, `MemoizedStore`, `NullStore`, and custom stores fail closed with
 `BirRateLimitException`; implementing `LockProvider` alone is not enough. An
 empty `BIR_RATE_LIMIT_STORE` uses the application's default cache store.
+
+`rate_limit.enabled` must resolve to an actual PHP boolean. The standard
+unquoted dotenv values `true` and `false` are parsed by Laravel as booleans.
+Empty, numeric, quoted, or otherwise malformed values fail closed with
+`LogicException`; they never silently disable the limiter.
 
 Use one shared Redis store and the same prefix for workers or application
 instances on multiple hosts. `ArrayStore` and `FileStore` are local and do not

@@ -13,6 +13,8 @@ class BirRegonService
 {
     use PreventsSerialization;
 
+    private bool $isSandbox = false;
+
     private ?self $sandboxService = null;
 
     private readonly SensitiveParameterValue $client;
@@ -23,6 +25,12 @@ class BirRegonService
         #[\SensitiveParameter] BirClientInterface $client,
         #[\SensitiveParameter] ?BirClientInterface $sandboxClient = null,
     ) {
+        if ($sandboxClient !== null && $client === $sandboxClient) {
+            throw new \InvalidArgumentException(
+                'Production and sandbox BIR clients must be different instances.',
+            );
+        }
+
         $this->client = new SensitiveParameterValue($client);
         $this->sandboxClient = new SensitiveParameterValue($sandboxClient);
     }
@@ -31,18 +39,22 @@ class BirRegonService
     {
         $this->ensureNotRestoredFromSerialization();
 
-        $client = $this->client();
+        if ($this->isSandbox) {
+            return $this;
+        }
+
         $sandboxClient = $this->sandboxClient();
 
         if ($sandboxClient === null) {
             throw new BirException('Sandbox client is not configured.');
         }
 
-        if ($client === $sandboxClient) {
-            return $this;
+        if ($this->sandboxService === null) {
+            $this->sandboxService = new self($sandboxClient);
+            $this->sandboxService->isSandbox = true;
         }
 
-        return $this->sandboxService ??= new self($sandboxClient, $sandboxClient);
+        return $this->sandboxService;
     }
 
     public function forNip(#[\SensitiveParameter] string $nip): BirSearchBuilder

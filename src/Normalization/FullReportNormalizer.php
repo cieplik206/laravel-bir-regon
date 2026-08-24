@@ -705,6 +705,7 @@ final readonly class FullReportNormalizer
         $bankruptcyDeclaredAt = $this->date($row, $bankruptcyFields);
         $bankruptcyProceedingsEndedAt = $this->date($row, $bankruptcyEndedFields);
         $status = $forcedStatus ?? $this->activityStatus(
+            startedAt: $startedAt,
             suspendedAt: $suspendedAt,
             resumedAt: $resumedAt,
             endedAt: $endedAt,
@@ -730,6 +731,7 @@ final readonly class FullReportNormalizer
     }
 
     private function activityStatus(
+        ?DateTimeImmutable $startedAt,
         ?DateTimeImmutable $suspendedAt,
         ?DateTimeImmutable $resumedAt,
         ?DateTimeImmutable $endedAt,
@@ -748,13 +750,15 @@ final readonly class FullReportNormalizer
             return ActivityStatus::Inactive;
         }
 
-        if ($suspendedAt === null) {
-            return ActivityStatus::Active;
+        if ($suspendedAt !== null) {
+            return $resumedAt !== null && $suspendedAt < $resumedAt
+                ? ActivityStatus::Active
+                : ActivityStatus::Inactive;
         }
 
-        return $resumedAt !== null && $suspendedAt < $resumedAt
+        return $startedAt !== null || $resumedAt !== null
             ? ActivityStatus::Active
-            : ActivityStatus::Inactive;
+            : ActivityStatus::Unknown;
     }
 
     private function personName(

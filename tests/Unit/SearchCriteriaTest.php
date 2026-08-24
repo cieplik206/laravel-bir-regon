@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use cieplik206\BirRegon\Exceptions\BirValidationException;
 use cieplik206\BirRegon\Protocol\SearchCriteria;
+use Symfony\Component\VarDumper\Cloner\VarCloner;
+use Symfony\Component\VarDumper\Dumper\CliDumper;
 
 it('keeps the exact WSDL search field order', function (): void {
     expect(SearchCriteria::WSDL_FIELD_ORDER)->toBe([
@@ -64,6 +66,54 @@ it('reports the number of identifiers charged by GUS', function (
     'REGON14 batch' => [SearchCriteria::regons14(['01234567800001', '01234567800002']), 2],
 ]);
 
+it('keeps a single identifier out of criteria dumps, exports, and serialized state', function (
+    SearchCriteria $criteria,
+    string $identifier,
+): void {
+    expect($criteria->value)->toBe($identifier);
+
+    expectSearchCriteriaViewsToExclude($criteria, [$identifier]);
+})->with([
+    'NIP' => [SearchCriteria::nip('9182736450'), '9182736450'],
+    'KRS' => [SearchCriteria::krs('0000987654'), '0000987654'],
+    'REGON' => [SearchCriteria::regon('987654321'), '987654321'],
+]);
+
+it('keeps a maximum batch out of criteria dumps, exports, and serialized state', function (
+    string $type,
+): void {
+    $identifiers = match ($type) {
+        'NIP', 'KRS' => array_map(
+            static fn (int $value): string => (string) (1_100_000_000 + $value),
+            range(1, SearchCriteria::MAX_BATCH_SIZE),
+        ),
+        'REGON9' => array_map(
+            static fn (int $value): string => (string) (200_000_000 + $value),
+            range(1, SearchCriteria::MAX_BATCH_SIZE),
+        ),
+        'REGON14' => array_map(
+            static fn (int $value): string => (string) (20_000_000_000_000 + $value),
+            range(1, SearchCriteria::MAX_BATCH_SIZE),
+        ),
+        default => throw new LogicException('Unsupported test criterion type.'),
+    };
+    $criteria = match ($type) {
+        'NIP' => SearchCriteria::nips($identifiers),
+        'KRS' => SearchCriteria::krsNumbers($identifiers),
+        'REGON9' => SearchCriteria::regons9($identifiers),
+        'REGON14' => SearchCriteria::regons14($identifiers),
+    };
+
+    expect(explode(',', $criteria->value))->toBe($identifiers);
+
+    expectSearchCriteriaViewsToExclude($criteria, $identifiers);
+})->with([
+    'NIP batch' => ['NIP'],
+    'KRS batch' => ['KRS'],
+    'REGON9 batch' => ['REGON9'],
+    'REGON14 batch' => ['REGON14'],
+]);
+
 it('rejects malformed single identifiers', function (Closure $create): void {
     expect($create)->toThrow(BirValidationException::class);
 })->with([
@@ -92,3 +142,52 @@ it('rejects empty, oversized, or malformed batches', function (Closure $create):
         static fn (): SearchCriteria => SearchCriteria::regons14(['012345678']),
     ],
 ]);
+
+/** @param list<string> $identifiers */
+function expectSearchCriteriaViewsToExclude(
+    SearchCriteria $criteria,
+    array $identifiers,
+): void {
+    ob_start();
+    var_dump($criteria);
+    $nativeDump = ob_get_clean();
+    $symfonyDump = '';
+    (new CliDumper)->dump(
+        (new VarCloner)->cloneVar($criteria),
+        static function (string $line) use (&$symfonyDump): void {
+            $symfonyDump .= $line;
+        },
+    );
+    $serialized = serialize($criteria);
+    $restored = unserialize($serialized);
+    $exportTombstone = SearchCriteria::__set_state([
+        'field' => $criteria->field,
+        'value' => $criteria->value,
+    ]);
+
+    foreach ([
+        print_r($criteria, true),
+        is_string($nativeDump) ? $nativeDump : '',
+        var_export($criteria, true),
+        $symfonyDump,
+        $serialized,
+        print_r($restored, true),
+        var_export($exportTombstone, true),
+    ] as $rendered) {
+        foreach ($identifiers as $identifier) {
+            expect($rendered)->not->toContain($identifier);
+        }
+    }
+
+    expect($restored)->toBeInstanceOf(SearchCriteria::class)
+        ->and(fn () => $restored->value)
+        ->toThrow(
+            LogicException::class,
+            sprintf('Serialization of %s is not supported.', SearchCriteria::class),
+        )
+        ->and(fn () => $exportTombstone->value)
+        ->toThrow(
+            LogicException::class,
+            sprintf('Serialization of %s is not supported.', SearchCriteria::class),
+        );
+}

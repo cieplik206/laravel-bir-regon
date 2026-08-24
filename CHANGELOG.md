@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-24
+
 ### Added
 
 - Add a first-party GUS BIR 1.2 SOAP 1.2/WS-Addressing transport, strict
@@ -34,6 +36,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Document the package's maintainer-used, best-effort maintenance model and
+  clarify that public issues do not imply commercial support, an SLA, or a
+  guaranteed response or fix
 - Resolve production and sandbox clients as isolated scoped services, validate
   identifiers and bulk-report dates before network access, diagnose ambiguous
   empty responses, and retry an expired session at most once
@@ -85,6 +90,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Clarify that the sandbox uses an independently maintained test dataset that
   may be stale, incomplete, artificial, or anonymized and cannot establish the
   current production registry state
+- Publish releases only after an owner-initiated dispatch of the trusted
+  default-branch workflow; pushing a version tag alone no longer publishes
+- Infer `ActivityStatus::Active` only from positive start or resumption
+  evidence and return `Unknown` for partial lifecycle records
+- Require an exact boolean for `BIR_RATE_LIMIT_ENABLED` and reject a manually
+  shared production/sandbox client instead of silently disabling isolation
 
 ### Fixed
 
@@ -121,6 +132,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   rather than an invalid key
 - Classify HTTP 200 non-SOAP maintenance responses as transport failures without
   retaining their body
+- Keep cloned native transports' SOAP body and SID-header state isolated, and
+  periodically retire reused cURL connections for certificate revalidation
 
 ### Removed
 
@@ -162,6 +175,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   ambiently configured HTTPS proxy connections
 - Ignore root-level environment files, local authentication state, and local
   PHPUnit overrides so an accidental `git add .` cannot stage them
+- Run the privileged release publisher from the trusted default branch, bind a
+  release ref to the signed tag object's internal name and target, require the
+  exact CI workflow run for that SHA, and revalidate remote state before write
+- Bound multipart responses by part count, per-part header bytes and count, and
+  `Content-Type` parameter count before materializing attacker-controlled
+  collections
+- Redact NIP, REGON, and KRS values from builder and search-criteria dumps,
+  exports, and serialized state, and keep buffered raw responses out of object
+  exporters without per-chunk memory amplification
+- Reject explicit proxy credentials over `http://` before network access while
+  retaining anonymous HTTP and authenticated HTTPS proxy support
 
 ## [1.1.1] - 2026-08-23
 
@@ -210,7 +234,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Isolated tests and opt-in live GUS sandbox tests
 - A discoverable Laravel Boost skill for AI-assisted integrations
 
-[Unreleased]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/cieplik206/laravel-bir-regon/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.1.1...v2.0.0
 [1.1.1]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.0.1...v1.0.2

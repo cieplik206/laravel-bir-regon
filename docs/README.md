@@ -1,12 +1,5 @@
 # Laravel BIR REGON documentation
 
-> [!IMPORTANT]
-> These pages describe the unreleased 2.x development line. The latest
-> published and supported stable line is 1.1.x, whose platform requirements
-> and public API differ. Use the
-> [documentation shipped with v1.1.1](https://github.com/cieplik206/laravel-bir-regon/tree/v1.1.1#readme)
-> for production until 2.0.0 is published.
-
 Laravel BIR REGON provides a fluent, Laravel-native interface for the Polish
 GUS BIR/REGON API. It keeps SOAP 1.2/WS-Addressing over bounded cURL,
 authentication, distributed request limiting, and session management inside
@@ -17,8 +10,20 @@ than one GUS entity type or silo.
 Every public string returned by GUS is untrusted, including company fields,
 raw and normalized reports, diagnostics, and service-status messages. Escape
 HTML, bind SQL parameters, validate links and email addresses, protect CSV/XLSX
-exports from formula injection, and normalize control characters before
-logging. Mapping does not sanitize source text.
+exports from formula injection, and normalize control plus Unicode
+format/bidirectional characters and bound length before logging. Mapping does
+not sanitize source text.
+
+## Maintenance and support
+
+The package was created for and is used in the maintainer's own projects, then
+shared publicly in case it is useful to others. Maintenance is best effort:
+there is no commercial support, SLA, guaranteed response time, or commitment
+to implement requested changes. Bug reports and focused pull requests are
+welcome without a guaranteed response or fix. See the
+[support policy](https://github.com/cieplik206/laravel-bir-regon/blob/main/SUPPORT.md)
+for details and use the private security-reporting process for suspected
+vulnerabilities.
 
 ## Getting started
 

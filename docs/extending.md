@@ -173,6 +173,10 @@ native sandbox graph so production extensions cannot accidentally receive the
 sandbox credential or session. Replace `BirRegonService` as a whole if an
 application also needs custom sandbox behavior.
 
+When constructing `BirRegonService` manually, pass distinct production and
+sandbox client instances. Supplying the same object for both environments is
+rejected, because it would route `sandbox()` calls through production state.
+
 `NativeSoapTransport` requires an explicit `BirRequestLimiterInterface` when it
 is instantiated directly. Laravel's service provider passes
 `CacheBirRequestLimiter` by default. Pass `UnlimitedBirRequestLimiter` only as
@@ -186,7 +190,9 @@ native environments when `BIR_PROXY_URL` is set. A direct
 host, and optional port; credentials must use the separate arguments and the
 username and password must be supplied together. The sender uses CONNECT,
 keeps target TLS verification enabled with a TLS 1.2 minimum, and applies the
-same minimum and verification to an HTTPS proxy.
+same minimum and verification to an HTTPS proxy. Proxy credentials require an
+`https://` URL; authenticated `http://` proxy configuration is rejected before
+network access, while an anonymous HTTP proxy remains supported.
 
 Do not combine these explicit proxy arguments with a custom
 `BirHttpSenderInterface`; construction fails closed because the package cannot
@@ -195,6 +201,14 @@ proxy arguments are null, the native sender leaves libcurl's ambient proxy
 behavior intact, including `HTTPS_PROXY` and `NO_PROXY`. A fully custom sender
 owns its own proxy, TLS, credential-redaction, and routing policy, including
 enforcement of the deployment's minimum TLS version.
+
+The native sender reuses its cURL handle but limits any connection to five
+minutes when the installed libcurl exposes `CURLOPT_MAXLIFETIME_CONN`. This
+forces periodic connection and certificate revalidation. Cloning
+`NativeSoapTransport` also clones its mutable envelope builder, so later SID
+changes cannot split the session used in the HTTP header from the one written
+to the SOAP body. Custom transports own equivalent pooling and clone-safety
+decisions.
 
 The limiter contract is deliberately small:
 `BirRequestLimiterInterface::acquire(BirOperation $operation, array $parameters = []): void`.

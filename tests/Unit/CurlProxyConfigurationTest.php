@@ -75,6 +75,12 @@ it('validates explicit proxy URLs and credentials without echoing their values',
         null,
         'BIR proxy username and password must be configured together.',
     ],
+    'credentials over cleartext HTTP' => [
+        'http://proxy.example.test:8080',
+        'proxy-user',
+        'proxy-password',
+        'BIR proxy credentials require an HTTPS proxy URL.',
+    ],
     'credential whitespace' => [
         'https://proxy.example.test:8443',
         ' proxy-user',
@@ -247,6 +253,20 @@ it('fails closed when explicit proxy settings accompany a custom HTTP sender', f
     ))->toThrow(
         LogicException::class,
         'BIR proxy configuration cannot be combined with a custom HTTP sender.',
+    );
+});
+
+it('rejects authenticated cleartext HTTP proxies passed directly to the native transport', function (): void {
+    expect(fn () => new NativeSoapTransport(
+        apiKey: 'APIKEYSENTINEL123456',
+        requestLimiter: new UnlimitedBirRequestLimiter,
+        environment: Environment::Sandbox,
+        proxyUrl: 'http://proxy.example.test:8080',
+        proxyUsername: 'proxy-user',
+        proxyPassword: 'proxy-password',
+    ))->toThrow(
+        InvalidArgumentException::class,
+        'BIR proxy credentials require an HTTPS proxy URL.',
     );
 });
 

@@ -100,6 +100,13 @@ identifier from `BirNotFoundException` or
 Keep the operation input separately when application policy requires a
 correlation value.
 
+Fluent search builders and native `SearchCriteria` objects also redact their
+identifier state from native dumps, `var_export`, Symfony VarDumper, and
+serialized payloads. Deserializing one produces an inert tombstone rather than
+a reusable request. Keep a separately protected identifier value when an
+application needs to rebuild work in a queue; do not use a serialized builder
+as a job payload.
+
 A completed HTTP 200 exchange is successful only when its media type is one of
 the supported SOAP representations. A `text/html` maintenance page or another
 non-SOAP 200 response is treated as `BirTransportException`; its body is not

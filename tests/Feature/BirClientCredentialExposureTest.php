@@ -519,6 +519,95 @@ it('does not expose credentials held by custom collaborators through public obje
     }
 });
 
+it('keeps a single search identifier out of builder dumps and serialized state', function (): void {
+    $identifier = '9876543210';
+    $client = new StubBirClient;
+    $builder = new BirSearchBuilder(
+        $client,
+        $identifier,
+        BirSearchBuilder::TYPE_NIP,
+    );
+
+    expect(fn () => $builder->get())
+        ->toThrow(RuntimeException::class, 'Companies not configured.');
+
+    expect($client->calls)->toBe([
+        ['searchByNip', $identifier],
+    ]);
+
+    foreach (renderCredentialObjectViews($builder) as $rendered) {
+        expect($rendered)->not->toContain($identifier);
+    }
+
+    $restored = unserialize(serialize($builder));
+
+    expect($restored)->toBeInstanceOf(BirSearchBuilder::class)
+        ->and(fn () => $restored->get())
+        ->toThrow(
+            LogicException::class,
+            sprintf('Serialization of %s is not supported.', BirSearchBuilder::class),
+        );
+});
+
+it('keeps a maximum batch of search identifiers out of builder dumps and serialized state', function (): void {
+    $identifiers = array_map(
+        static fn (int $value): string => (string) (1_100_000_000 + $value),
+        range(1, SearchCriteria::MAX_BATCH_SIZE),
+    );
+    $client = new StubBirClient;
+    $builder = new BirBatchSearchBuilder(
+        $client,
+        $identifiers,
+        BirBatchSearchBuilder::TYPE_NIPS,
+    );
+
+    expect(fn () => $builder->get())
+        ->toThrow(RuntimeException::class, 'Companies not configured.');
+
+    expect($client->calls)->toBe([
+        ['searchByNips', $identifiers],
+    ]);
+
+    foreach (renderCredentialObjectViews($builder) as $rendered) {
+        foreach ($identifiers as $identifier) {
+            expect($rendered)->not->toContain($identifier);
+        }
+    }
+
+    $serialized = serialize($builder);
+    $restored = unserialize($serialized);
+
+    expect($restored)->toBeInstanceOf(BirBatchSearchBuilder::class)
+        ->and(fn () => $restored->get())
+        ->toThrow(
+            LogicException::class,
+            sprintf('Serialization of %s is not supported.', BirBatchSearchBuilder::class),
+        );
+});
+
+/** @return list<string> */
+function renderCredentialObjectViews(object $subject): array
+{
+    ob_start();
+    var_dump($subject);
+    $nativeDump = ob_get_clean();
+    $symfonyDump = '';
+    (new CliDumper)->dump(
+        (new VarCloner)->cloneVar($subject),
+        static function (string $line) use (&$symfonyDump): void {
+            $symfonyDump .= $line;
+        },
+    );
+
+    return [
+        print_r($subject, true),
+        is_string($nativeDump) ? $nativeDump : '',
+        var_export($subject, true),
+        $symfonyDump,
+        serialize($subject),
+    ];
+}
+
 /** @param list<string> $sensitiveValues */
 function expectCredentialThrowableToExclude(Throwable $exception, array $sensitiveValues): void
 {

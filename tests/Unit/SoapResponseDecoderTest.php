@@ -68,6 +68,40 @@ function utf16LeSoapDocument(string $xml): string
     return "\xFF\xFE".$encoded;
 }
 
+function multipartSoapWithPartCount(int $partCount): string
+{
+    if ($partCount < 1) {
+        throw new InvalidArgumentException('A multipart response needs at least one part.');
+    }
+
+    $boundary = 'bounded-parts-fixture';
+    $mime = '';
+
+    for ($index = 0; $index < $partCount; $index++) {
+        $isSoap = $index === 0;
+        $contentType = $isSoap ? 'application/soap+xml' : 'text/plain';
+        $payload = $isSoap
+            ? soapFixture('soap/login-success.xml')
+            : 'ignored attachment '.$index;
+        $mime .= "--{$boundary}\r\n"
+            ."Content-Type: {$contentType}\r\n"
+            ."Content-Transfer-Encoding: 8bit\r\n\r\n"
+            .$payload."\r\n";
+    }
+
+    return $mime."--{$boundary}--\r\n";
+}
+
+function multipartSoapWithHeaders(string $headers): string
+{
+    $boundary = 'bounded-headers-fixture';
+
+    return "--{$boundary}\r\n"
+        .$headers."\r\n\r\n"
+        .soapFixture('soap/login-success.xml')."\r\n"
+        ."--{$boundary}--\r\n";
+}
+
 it('decodes plain SOAP response fixtures', function (
     BirOperation $operation,
     string $fixture,
@@ -244,6 +278,122 @@ it('extracts the SOAP root from a standard MIME response body', function (): voi
 
     expect($response->successful)->toBeTrue()
         ->and($response->result())->toBe('fixtureSession000001');
+});
+
+it('accepts the maximum supported MIME part count', function (): void {
+    $response = (new SoapResponseDecoder)->decode(
+        multipartSoapWithPartCount(32),
+        BirOperation::Login,
+    );
+
+    expect($response->successful)->toBeTrue()
+        ->and($response->result())->toBe('fixtureSession000001');
+});
+
+it('rejects excessive MIME parts before parsing an unbounded parts array', function (): void {
+    $response = (new SoapResponseDecoder)->decode(
+        multipartSoapWithPartCount(33),
+        BirOperation::Login,
+    );
+
+    expect($response->successful)->toBeFalse()
+        ->and($response->failureType)->toBe(TransportFailureType::Protocol);
+});
+
+it('accepts MIME part headers at the byte limit', function (): void {
+    $prefix = "Content-Type: application/soap+xml\r\nX-Padding: ";
+    $headers = $prefix.str_repeat('a', 8_192 - strlen($prefix));
+    $response = (new SoapResponseDecoder)->decode(
+        multipartSoapWithHeaders($headers),
+        BirOperation::Login,
+    );
+
+    expect(strlen($headers))->toBe(8_192)
+        ->and($response->successful)->toBeTrue()
+        ->and($response->result())->toBe('fixtureSession000001');
+});
+
+it('rejects MIME part headers above the byte limit', function (): void {
+    $prefix = "Content-Type: application/soap+xml\r\nX-Padding: ";
+    $headers = $prefix.str_repeat('a', 8_193 - strlen($prefix));
+    $response = (new SoapResponseDecoder)->decode(
+        multipartSoapWithHeaders($headers),
+        BirOperation::Login,
+    );
+
+    expect(strlen($headers))->toBe(8_193)
+        ->and($response->successful)->toBeFalse()
+        ->and($response->failureType)->toBe(TransportFailureType::Protocol);
+});
+
+it('accepts the maximum supported number of MIME part headers', function (): void {
+    $headers = ['Content-Type: application/soap+xml'];
+
+    for ($index = 1; $index < 32; $index++) {
+        $headers[] = "X-Fixture-{$index}: accepted";
+    }
+
+    $response = (new SoapResponseDecoder)->decode(
+        multipartSoapWithHeaders(implode("\r\n", $headers)),
+        BirOperation::Login,
+    );
+
+    expect($headers)->toHaveCount(32)
+        ->and($response->successful)->toBeTrue()
+        ->and($response->result())->toBe('fixtureSession000001');
+});
+
+it('rejects excessive MIME part headers', function (): void {
+    $headers = ['Content-Type: application/soap+xml'];
+
+    for ($index = 1; $index < 33; $index++) {
+        $headers[] = "X-Fixture-{$index}: rejected";
+    }
+
+    $response = (new SoapResponseDecoder)->decode(
+        multipartSoapWithHeaders(implode("\r\n", $headers)),
+        BirOperation::Login,
+    );
+
+    expect($headers)->toHaveCount(33)
+        ->and($response->successful)->toBeFalse()
+        ->and($response->failureType)->toBe(TransportFailureType::Protocol);
+});
+
+it('limits MIME content type parameters', function (
+    int $parameterCount,
+    bool $expectedSuccess,
+): void {
+    $contentType = 'Content-Type: application/soap+xml';
+
+    for ($index = 1; $index <= $parameterCount; $index++) {
+        $contentType .= "; fixture{$index}=value{$index}";
+    }
+
+    $response = (new SoapResponseDecoder)->decode(
+        multipartSoapWithHeaders($contentType),
+        BirOperation::Login,
+    );
+
+    expect($response->successful)->toBe($expectedSuccess)
+        ->and($response->failureType)->toBe(
+            $expectedSuccess ? null : TransportFailureType::Protocol,
+        );
+})->with([
+    'at the limit' => [16, true],
+    'above the limit' => [17, false],
+]);
+
+it('rejects control characters in MIME header values', function (): void {
+    $response = (new SoapResponseDecoder)->decode(
+        multipartSoapWithHeaders(
+            "Content-Type: application/soap+xml\r\nX-Untrusted: before\x01after",
+        ),
+        BirOperation::Login,
+    );
+
+    expect($response->successful)->toBeFalse()
+        ->and($response->failureType)->toBe(TransportFailureType::Protocol);
 });
 
 it('decodes the historically indented single-part MIME framing used by GUS', function (

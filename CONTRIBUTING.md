@@ -1,7 +1,8 @@
 # Contributing
 
 Contributions are welcome. Please keep pull requests focused and include tests
-for changed behavior.
+for changed behavior. Review is performed on a best-effort basis without a
+guaranteed response or merge timeframe; see [SUPPORT.md](SUPPORT.md).
 
 ## Local development
 

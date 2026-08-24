@@ -20,6 +20,14 @@ final readonly class SoapResponseDecoder
 
     private const XSI_NAMESPACE = 'http://www.w3.org/2001/XMLSchema-instance';
 
+    private const MAX_MIME_PARTS = 32;
+
+    private const MAX_MIME_HEADER_BYTES = 8_192;
+
+    private const MAX_MIME_HEADERS = 32;
+
+    private const MAX_CONTENT_TYPE_PARAMETERS = 16;
+
     public function __construct(private int $maxResponseBytes = 10_000_000) {}
 
     public function decode(
@@ -414,34 +422,50 @@ final readonly class SoapResponseDecoder
         string $boundary,
     ): ?array {
         $pattern = '/^--'.preg_quote($boundary, '/').'(?<closing>--)?[ \t]*\r?$/m';
-        $count = preg_match_all($pattern, $body, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+        $parts = [];
+        $searchOffset = 0;
+        $previousDelimiterEnd = null;
 
-        if (! is_int($count) || $count < 2) {
-            return null;
-        }
+        while (true) {
+            $matched = preg_match(
+                $pattern,
+                $body,
+                $match,
+                PREG_OFFSET_CAPTURE,
+                $searchOffset,
+            );
 
-        $lastIndex = $count - 1;
-
-        foreach ($matches as $index => $match) {
-            $closing = ($match['closing'][1] ?? -1) !== -1;
-
-            if (($index === $lastIndex) !== $closing) {
+            if ($matched !== 1) {
                 return null;
             }
-        }
 
-        $parts = [];
+            $delimiterLine = $match[0][0];
+            $delimiterOffset = $match[0][1];
+            $delimiterEnd = $delimiterOffset + strlen($delimiterLine);
+            $isClosing = isset($match['closing']) && $match['closing'][1] !== -1;
 
-        for ($index = 0; $index < $lastIndex; $index++) {
-            $delimiter = $matches[$index][0];
-            $nextDelimiter = $matches[$index + 1][0];
-            $start = $delimiter[1] + strlen($delimiter[0]);
+            if ($previousDelimiterEnd === null) {
+                if ($isClosing) {
+                    return null;
+                }
+
+                $previousDelimiterEnd = $delimiterEnd;
+                $searchOffset = $delimiterEnd;
+
+                continue;
+            }
+
+            if (count($parts) >= self::MAX_MIME_PARTS) {
+                return null;
+            }
+
+            $start = $previousDelimiterEnd;
 
             if (($body[$start] ?? '') === "\n") {
                 $start++;
             }
 
-            $length = $nextDelimiter[1] - $start;
+            $length = $delimiterOffset - $start;
 
             if ($length < 0) {
                 return null;
@@ -455,9 +479,22 @@ final readonly class SoapResponseDecoder
             }
 
             $parts[] = $part;
-        }
 
-        return $parts;
+            if ($isClosing) {
+                $nextMatch = preg_match(
+                    $pattern,
+                    $body,
+                    $unexpected,
+                    PREG_OFFSET_CAPTURE,
+                    $delimiterEnd,
+                );
+
+                return $nextMatch === 0 ? $parts : null;
+            }
+
+            $previousDelimiterEnd = $delimiterEnd;
+            $searchOffset = $delimiterEnd;
+        }
     }
 
     /** @return list<string>|null */
@@ -473,7 +510,7 @@ final readonly class SoapResponseDecoder
         if (
             preg_match($openingPattern, $body, $opening, PREG_OFFSET_CAPTURE) !== 1
             || preg_match($closingPattern, $body, $closing, PREG_OFFSET_CAPTURE) !== 1
-            || preg_match_all($allBoundaryPattern, $body) !== 2
+            || ! $this->hasExactlyTwoBoundaryLines($body, $allBoundaryPattern)
         ) {
             return null;
         }
@@ -524,6 +561,32 @@ final readonly class SoapResponseDecoder
         }
 
         return [$headers."\r\n\r\n".$entity['body']];
+    }
+
+    private function hasExactlyTwoBoundaryLines(
+        #[\SensitiveParameter] string $body,
+        string $pattern,
+    ): bool {
+        $count = 0;
+        $searchOffset = 0;
+
+        while (true) {
+            $matched = preg_match($pattern, $body, $match, PREG_OFFSET_CAPTURE, $searchOffset);
+
+            if ($matched === 0) {
+                return $count === 2;
+            }
+
+            if ($matched !== 1) {
+                return false;
+            }
+
+            if (++$count > 2) {
+                return false;
+            }
+
+            $searchOffset = $match[0][1] + strlen($match[0][0]);
+        }
     }
 
     private function dedentHistoricalMimeHeaders(string $rawHeaders, string $indent): ?string
@@ -581,6 +644,10 @@ final readonly class SoapResponseDecoder
             return null;
         }
 
+        if ($separatorPosition > self::MAX_MIME_HEADER_BYTES) {
+            return null;
+        }
+
         return [
             'headers' => substr($entity, 0, $separatorPosition),
             'body' => substr($entity, $separatorPosition + $separatorLength),
@@ -590,13 +657,22 @@ final readonly class SoapResponseDecoder
     /** @return array<string, string>|null */
     private function parseMimeHeaders(string $rawHeaders): ?array
     {
-        if (preg_match('/\r(?!\n)|\x00/', $rawHeaders) === 1) {
+        if (
+            strlen($rawHeaders) > self::MAX_MIME_HEADER_BYTES
+            || preg_match('/\r(?!\n)|[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $rawHeaders) === 1
+        ) {
+            return null;
+        }
+
+        $lines = preg_split('/\r?\n/', $rawHeaders);
+
+        if (! is_array($lines) || count($lines) > self::MAX_MIME_HEADERS) {
             return null;
         }
 
         $headers = [];
 
-        foreach (preg_split('/\r?\n/', $rawHeaders) ?: [] as $line) {
+        foreach ($lines as $line) {
             if ($line === '' || preg_match('/^[ \t]/', $line) === 1) {
                 return null;
             }
@@ -732,6 +808,10 @@ final readonly class SoapResponseDecoder
             }
 
             $parameters[$name] = $value;
+
+            if (count($parameters) > self::MAX_CONTENT_TYPE_PARAMETERS) {
+                return null;
+            }
         }
 
         return ['mediaType' => $mediaType, 'parameters' => $parameters];

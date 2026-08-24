@@ -111,7 +111,27 @@ it('derives documented activity status from lifecycle fields', function (
 
     expect($normalized->entity?->lifecycle?->status)->toBe($status);
 })->with([
-    'no blocking lifecycle field' => [[], ActivityStatus::Active],
+    'no lifecycle evidence' => [[], ActivityStatus::Unknown],
+    'creation is historical rather than current activity evidence' => [
+        ['fiz_dataPowstania' => '2020-01-01'],
+        ActivityStatus::Unknown,
+    ],
+    'REGON registration is historical rather than current activity evidence' => [
+        ['fiz_dataWpisuDzialalnosciDoRegon' => '2020-01-01'],
+        ActivityStatus::Unknown,
+    ],
+    'a recorded change is not current activity evidence' => [
+        ['fiz_dataZaistnieniaZmianyDzialalnosci' => '2020-01-01'],
+        ActivityStatus::Unknown,
+    ],
+    'started' => [
+        ['fiz_dataRozpoczeciaDzialalnosci' => '2020-01-01'],
+        ActivityStatus::Active,
+    ],
+    'resumed without the historical suspension date' => [
+        ['fiz_dataWznowieniaDzialalnosci' => '2024-02-01'],
+        ActivityStatus::Active,
+    ],
     'suspended without resumption' => [
         ['fiz_dataZawieszeniaDzialalnosci' => '2024-01-01'],
         ActivityStatus::Inactive,
@@ -120,17 +140,137 @@ it('derives documented activity status from lifecycle fields', function (
         'fiz_dataZawieszeniaDzialalnosci' => '2024-01-01',
         'fiz_dataWznowieniaDzialalnosci' => '2024-02-01',
     ], ActivityStatus::Active],
+    'resumption on the suspension date does not prove a later resumption' => [[
+        'fiz_dataZawieszeniaDzialalnosci' => '2024-01-01',
+        'fiz_dataWznowieniaDzialalnosci' => '2024-01-01',
+    ], ActivityStatus::Inactive],
+    'resumption before suspension leaves the activity suspended' => [[
+        'fiz_dataZawieszeniaDzialalnosci' => '2024-02-01',
+        'fiz_dataWznowieniaDzialalnosci' => '2024-01-01',
+    ], ActivityStatus::Inactive],
     'ended' => [
         ['fiz_dataZakonczeniaDzialalnosci' => '2024-01-01'],
+        ActivityStatus::Inactive,
+    ],
+    'removed from REGON' => [
+        ['fiz_dataSkresleniaDzialalnosciZRegon' => '2024-01-01'],
         ActivityStatus::Inactive,
     ],
     'bankruptcy declared' => [
         ['fiz_dataOrzeczeniaOUpadlosci' => '2024-01-01'],
         ActivityStatus::Inactive,
     ],
+    'bankruptcy proceedings ended' => [
+        ['fiz_dataZakonczeniaPostepowaniaUpadlosciowego' => '2024-01-01'],
+        ActivityStatus::Inactive,
+    ],
     'not started' => [
         ['fizC_NiePodjetoDzialalnosci' => 'true'],
         ActivityStatus::Inactive,
+    ],
+    'explicit not-started false is not current activity evidence' => [
+        ['fizC_NiePodjetoDzialalnosci' => 'false'],
+        ActivityStatus::Unknown,
+    ],
+    'ending evidence takes precedence over a later positive date' => [[
+        'fiz_dataRozpoczeciaDzialalnosci' => '2020-01-01',
+        'fiz_dataWznowieniaDzialalnosci' => '2025-01-01',
+        'fiz_dataZakonczeniaDzialalnosci' => '2024-01-01',
+    ], ActivityStatus::Inactive],
+]);
+
+it('does not infer current activity from sparse identity-only reports', function (
+    ReportType $reportType,
+    array $row,
+    bool $listReport,
+): void {
+    $normalized = (new FullReportNormalizer)->normalize($reportType, [$row]);
+    $entity = $listReport ? ($normalized->localUnits[0] ?? null) : $normalized->entity;
+
+    expect($entity)->not->toBeNull()
+        ->and($entity?->lifecycle?->status)->toBe(ActivityStatus::Unknown);
+})->with([
+    'natural-person activity with REGON only' => [
+        ReportType::NaturalPersonCeidg,
+        ['fiz_regon9' => '012345678'],
+        false,
+    ],
+    'natural-person activity with name only' => [
+        ReportType::NaturalPersonOther,
+        ['fiz_nazwa' => 'PRZYKŁADOWA DZIAŁALNOŚĆ'],
+        false,
+    ],
+    'legal entity with REGON only' => [
+        ReportType::Organization,
+        ['praw_regon9' => '012345678'],
+        false,
+    ],
+    'legal entity with name only' => [
+        ReportType::Organization,
+        ['praw_nazwa' => 'PRZYKŁADOWA SPÓŁKA'],
+        false,
+    ],
+    'natural-person local unit with REGON only' => [
+        ReportType::NaturalPersonLocal,
+        ['lokfiz_regon14' => '01234567800001'],
+        false,
+    ],
+    'legal local unit with name only' => [
+        ReportType::OrganizationLocal,
+        ['lokpraw_nazwa' => 'PRZYKŁADOWY ODDZIAŁ'],
+        false,
+    ],
+    'natural-person local-unit list row with name only' => [
+        ReportType::NaturalPersonLocals,
+        ['lokfiz_nazwa' => 'PRZYKŁADOWY PUNKT'],
+        true,
+    ],
+    'legal local-unit list row with REGON only' => [
+        ReportType::OrganizationLocals,
+        ['lokpraw_regon14' => '01234567800001'],
+        true,
+    ],
+]);
+
+it('requires a start or resumption date to infer active status across report shapes', function (
+    ReportType $reportType,
+    array $row,
+    bool $listReport,
+): void {
+    $normalized = (new FullReportNormalizer)->normalize($reportType, [$row]);
+    $entity = $listReport ? ($normalized->localUnits[0] ?? null) : $normalized->entity;
+
+    expect($entity?->lifecycle?->status)->toBe(ActivityStatus::Active);
+})->with([
+    'natural-person activity start' => [
+        ReportType::NaturalPersonCeidg,
+        ['fiz_dataRozpoczeciaDzialalnosci' => '2020-01-01'],
+        false,
+    ],
+    'legal entity start' => [
+        ReportType::Organization,
+        ['praw_dataRozpoczeciaDzialalnosci' => '2020-01-01'],
+        false,
+    ],
+    'natural-person local-unit resumption' => [
+        ReportType::NaturalPersonLocal,
+        ['lokfiz_dataWznowieniaDzialalnosci' => '2024-01-01'],
+        false,
+    ],
+    'legal local-unit start' => [
+        ReportType::OrganizationLocal,
+        ['lokpraw_dataRozpoczeciaDzialalnosci' => '2020-01-01'],
+        false,
+    ],
+    'natural-person local-unit list start' => [
+        ReportType::NaturalPersonLocals,
+        ['lokfiz_dataRozpoczeciaDzialalnosci' => '2020-01-01'],
+        true,
+    ],
+    'legal local-unit list resumption' => [
+        ReportType::OrganizationLocals,
+        ['lokpraw_dataWznowieniaDzialalnosci' => '2024-01-01'],
+        true,
     ],
 ]);
 

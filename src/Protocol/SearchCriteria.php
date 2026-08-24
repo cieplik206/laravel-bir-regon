@@ -6,7 +6,10 @@ namespace cieplik206\BirRegon\Protocol;
 
 use cieplik206\BirRegon\Exceptions\BirValidationException;
 use cieplik206\BirRegon\Validation\PolishIdentifierChecksum;
+use LogicException;
+use SensitiveParameterValue;
 
+/** @property-read string $value */
 final readonly class SearchCriteria
 {
     public const MAX_BATCH_SIZE = 20;
@@ -22,10 +25,18 @@ final readonly class SearchCriteria
         'Regony9zn',
     ];
 
+    private SensitiveParameterValue $value;
+
+    private bool $available;
+
     private function __construct(
         public string $field,
-        #[\SensitiveParameter] public string $value,
-    ) {}
+        #[\SensitiveParameter] string $value,
+        bool $available = true,
+    ) {
+        $this->value = new SensitiveParameterValue($value);
+        $this->available = $available;
+    }
 
     public static function nip(
         #[\SensitiveParameter] string $nip,
@@ -120,9 +131,94 @@ final readonly class SearchCriteria
 
     public function identifierCount(): int
     {
+        $this->ensureAvailable();
+
         return in_array($this->field, ['Krs', 'Nip', 'Regon'], true)
             ? 1
-            : substr_count($this->value, ',') + 1;
+            : substr_count($this->value(), ',') + 1;
+    }
+
+    public function __get(string $name): mixed
+    {
+        if ($name === 'value') {
+            return $this->value();
+        }
+
+        trigger_error(sprintf(
+            'Undefined property: %s::$%s',
+            self::class,
+            $name,
+        ), E_USER_WARNING);
+
+        return null;
+    }
+
+    public function __isset(string $name): bool
+    {
+        return $name === 'value' && $this->available;
+    }
+
+    /** @return array<never, never> */
+    public function __serialize(): array
+    {
+        return [];
+    }
+
+    /** @param array<array-key, mixed> $data */
+    public function __unserialize(#[\SensitiveParameter] array $data): void
+    {
+        unset($data);
+
+        $this->field = 'Nip';
+        $this->value = new SensitiveParameterValue('');
+        $this->available = false;
+    }
+
+    /** @param array<string, mixed> $properties */
+    public static function __set_state(#[\SensitiveParameter] array $properties): self
+    {
+        unset($properties);
+
+        return new self('Nip', '', false);
+    }
+
+    /** @return array<string, string> */
+    public function __debugInfo(): array
+    {
+        if (! $this->available) {
+            return [
+                'field' => '[UNAVAILABLE]',
+                'value' => '[UNAVAILABLE]',
+            ];
+        }
+
+        return [
+            'field' => $this->field,
+            'value' => '[REDACTED]',
+        ];
+    }
+
+    private function value(): string
+    {
+        $this->ensureAvailable();
+
+        $value = $this->value->getValue();
+
+        if (! is_string($value)) {
+            throw new LogicException('The BIR search criterion is unavailable.');
+        }
+
+        return $value;
+    }
+
+    private function ensureAvailable(): void
+    {
+        if (! $this->available) {
+            throw new LogicException(sprintf(
+                'Serialization of %s is not supported.',
+                self::class,
+            ));
+        }
     }
 
     private static function validateIdentifier(

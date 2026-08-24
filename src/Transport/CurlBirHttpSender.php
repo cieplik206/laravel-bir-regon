@@ -15,6 +15,8 @@ use Throwable;
 /** @internal */
 final readonly class CurlBirHttpSender implements BirHttpSenderInterface
 {
+    private const MAX_CONNECTION_LIFETIME_SECONDS = 300;
+
     private const MAX_CONNECTION_TIMEOUT_SECONDS = 60;
 
     private const MAX_REQUEST_TIMEOUT_SECONDS = 300;
@@ -101,6 +103,10 @@ final readonly class CurlBirHttpSender implements BirHttpSenderInterface
                     CURLOPT_USERAGENT => $this->userAgent,
                     CURLOPT_WRITEFUNCTION => $buffer->writeBody(...),
                 ];
+
+                if (defined('CURLOPT_MAXLIFETIME_CONN')) {
+                    $safeOptions[constant('CURLOPT_MAXLIFETIME_CONN')] = self::MAX_CONNECTION_LIFETIME_SECONDS;
+                }
 
                 if (! $this->optionSetter()->setMany($handle, $safeOptions)) {
                     return RawTransportResult::failure();
