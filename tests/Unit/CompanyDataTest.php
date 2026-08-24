@@ -4,48 +4,95 @@ declare(strict_types=1);
 
 use cieplik206\BirRegon\Data\CompanyData;
 use cieplik206\BirRegon\Data\FullCompanyReportData;
-use GusApi\SearchReport;
-use GusApi\Type\Response\SearchResponseCompanyData;
+use cieplik206\BirRegon\Enums\EntityType;
+use cieplik206\BirRegon\Enums\NipStatus;
+use cieplik206\BirRegon\Enums\ReportType;
+use cieplik206\BirRegon\Enums\Silo;
+use cieplik206\BirRegon\Protocol\SearchResult;
 
-it('maps a GUS search result to Laravel Data objects', function (): void {
-    $response = new SearchResponseCompanyData;
-    $response->Regon = '123456789';
-    $response->Nip = '';
-    $response->Nazwa = 'Test Company';
-    $response->Wojewodztwo = 'MAZOWIECKIE';
-    $response->Powiat = 'Warszawa';
-    $response->Gmina = 'Warszawa';
-    $response->Miejscowosc = 'Warszawa';
-    $response->KodPocztowy = '00-001';
-    $response->Ulica = 'Testowa';
-    $response->NrNieruchomosci = '1';
-    $response->NrLokalu = '';
-    $response->Typ = 'P';
-    $response->StatusNip = 'Aktywny';
-    $response->SilosID = '6';
-    $response->DataZakonczeniaDzialalnosci = '2025-12-31';
-    $response->MiejscowoscPoczty = 'Warszawa';
+it('maps a native search result to Laravel Data objects', function (): void {
+    $searchResult = SearchResult::tryFromRecord([
+        'Regon' => '123456789',
+        'Nip' => '',
+        'Nazwa' => 'Test Company',
+        'Wojewodztwo' => 'MAZOWIECKIE',
+        'Powiat' => 'Warszawa',
+        'Gmina' => 'Warszawa',
+        'Miejscowosc' => 'Warszawa',
+        'KodPocztowy' => '00-001',
+        'Ulica' => 'Testowa',
+        'NrNieruchomosci' => '1',
+        'NrLokalu' => '',
+        'Typ' => 'P',
+        'StatusNip' => 'Uchylony',
+        'SilosID' => '6',
+        'DataZakonczeniaDzialalnosci' => '2025-12-31',
+        'MiejscowoscPoczty' => 'Warszawa',
+    ]);
 
-    $searchReport = new SearchReport($response);
-    $company = CompanyData::fromGusApiResult($searchReport);
-    $fullReport = FullCompanyReportData::fromGusApiReport(
-        $searchReport,
-        [['Nazwa' => 'Test Company']],
+    if (! $searchResult instanceof SearchResult) {
+        throw new LogicException('Expected the valid search record to be decoded.');
+    }
+
+    $company = CompanyData::fromSearchResult($searchResult);
+    $untrustedName = '<script>alert(1)</script>\'; DROP TABLE companies; -- =CMD()';
+    $rawReportData = [[
+        'praw_regon9' => '123456789',
+        'praw_nazwa' => $untrustedName,
+        'future_field' => 'kept verbatim',
+    ]];
+    $fullReport = FullCompanyReportData::fromSearchResult(
+        $searchResult,
+        ReportType::Organization,
+        $rawReportData,
     );
+    $array = $company->toArray();
 
-    expect($company)
-        ->toBeInstanceOf(CompanyData::class)
-        ->and($company->regon)->toBe('123456789')
+    expect($company->regon)->toBe('123456789')
         ->and($company->nip)->toBeNull()
         ->and($company->name)->toBe('Test Company')
         ->and($company->apartmentNumber)->toBeNull()
-        ->and($company->type)->toBe('p')
-        ->and($company->regon14)->toBe('12345678900000')
-        ->and($company->nipStatus)->toBe('Aktywny')
-        ->and($company->silo)->toBe(6)
+        ->and($company->type)->toBe(EntityType::LegalUnit)
+        ->and($company->regon14)->toBeNull()
+        ->and($company->nipStatus)->toBe(NipStatus::Revoked)
+        ->and($company->silo)->toBe(Silo::LegalUnits)
         ->and($company->activityEndDate)->toBe('2025-12-31')
         ->and($company->postCity)->toBe('Warszawa')
-        ->and($company->toArray()['postalCode'])->toBe('00-001')
+        ->and($array['postalCode'])->toBe('00-001')
+        ->and($array['type'])->toBe('P')
+        ->and($array['nipStatus'])->toBe('Uchylony')
+        ->and($array['silo'])->toBe(6)
         ->and($fullReport->basicData->regon)->toBe('123456789')
-        ->and($fullReport->reportData)->toBe([['Nazwa' => 'Test Company']]);
+        ->and($fullReport->reportType)->toBe(ReportType::Organization)
+        ->and($fullReport->reportData)->toBe($rawReportData)
+        ->and($fullReport->normalized->entity?->identity->name)->toBe($untrustedName)
+        ->and($fullReport->reportData[0]['future_field'])->toBe('kept verbatim');
+});
+
+it('preserves empty and unknown-only raw rows without creating phantom normalized entities', function (): void {
+    $searchResult = SearchResult::tryFromRecord([
+        'Regon' => '123456789',
+        'Typ' => 'P',
+        'SilosID' => '6',
+    ]);
+
+    expect($searchResult)->toBeInstanceOf(SearchResult::class);
+
+    $rawReportData = [['future_field' => 'kept verbatim']];
+    $fullReport = FullCompanyReportData::fromSearchResult(
+        $searchResult,
+        ReportType::Organization,
+        $rawReportData,
+    );
+    $emptyRawReportData = [[]];
+    $emptyFullReport = FullCompanyReportData::fromSearchResult(
+        $searchResult,
+        ReportType::Organization,
+        $emptyRawReportData,
+    );
+
+    expect($fullReport->reportData)->toBe($rawReportData)
+        ->and($fullReport->normalized->entity)->toBeNull()
+        ->and($emptyFullReport->reportData)->toBe($emptyRawReportData)
+        ->and($emptyFullReport->normalized->entity)->toBeNull();
 });

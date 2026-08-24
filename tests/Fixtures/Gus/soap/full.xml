@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://www.w3.org/2005/08/addressing">
+  <s:Header>
+    <a:Action s:mustUnderstand="1">http://CIS/BIR/PUBL/2014/07/IUslugaBIRzewnPubl/DanePobierzPelnyRaportResponse</a:Action>
+  </s:Header>
+  <s:Body>
+    <DanePobierzPelnyRaportResponse xmlns="http://CIS/BIR/PUBL/2014/07">
+      <DanePobierzPelnyRaportResult><![CDATA[<root>
+  <dane>
+    <praw_regon9>012345678</praw_regon9>
+    <praw_nip>0123456789</praw_nip>
+    <praw_statusNip />
+    <praw_nazwa>FIKCYJNA SPÓŁKA TESTOWA</praw_nazwa>
+    <praw_nazwaSkrocona>FST</praw_nazwaSkrocona>
+    <praw_dataPowstania>2020-01-02</praw_dataPowstania>
+    <praw_dataRozpoczeciaDzialalnosci>2020-02-03</praw_dataRozpoczeciaDzialalnosci>
+    <praw_adSiedzKodPocztowy>00-001</praw_adSiedzKodPocztowy>
+    <praw_adSiedzNumerNieruchomosci>1</praw_adSiedzNumerNieruchomosci>
+    <praw_adSiedzNumerLokalu />
+    <praw_adSiedzMiejscowosc_Nazwa>Testowo</praw_adSiedzMiejscowosc_Nazwa>
+    <praw_adSiedzUlica_Nazwa>ul. Przykładowa</praw_adSiedzUlica_Nazwa>
+  </dane>
+</root>]]></DanePobierzPelnyRaportResult>
+    </DanePobierzPelnyRaportResponse>
+  </s:Body>
+</s:Envelope>

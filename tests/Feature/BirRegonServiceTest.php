@@ -9,9 +9,12 @@ use cieplik206\BirRegon\Data\DiagnosticsData;
 use cieplik206\BirRegon\Data\FullCompanyReportData;
 use cieplik206\BirRegon\Data\ServiceStatusData;
 use cieplik206\BirRegon\Enums\BulkReportType;
+use cieplik206\BirRegon\Enums\EntityType;
 use cieplik206\BirRegon\Enums\ReportType;
+use cieplik206\BirRegon\Enums\Silo;
 use cieplik206\BirRegon\Exceptions\BirException;
 use cieplik206\BirRegon\Facades\BirRegon;
+use cieplik206\BirRegon\Normalization\FullReportNormalizer;
 use cieplik206\BirRegon\Tests\Support\StubBirClient;
 use Illuminate\Support\Collection;
 
@@ -22,8 +25,40 @@ it('searches for a company by NIP', function (): void {
 
     $result = $service->forNip('1234567890')->search();
 
-    expect($result)->toBe($company)
+    expect($result)->toHaveCount(1)
+        ->and($result->sole())->toBe($company)
         ->and($client->calls)->toBe([['searchByNip', '1234567890']]);
+});
+
+it('returns every company for each singular identifier builder', function (): void {
+    $firstCompany = makeCompanyData([
+        'regon' => '123456789',
+        'name' => 'CEIDG activity',
+        'silo' => Silo::Ceidg,
+    ]);
+    $secondCompany = makeCompanyData([
+        'regon' => '987654321',
+        'name' => 'Agricultural activity',
+        'silo' => Silo::Agriculture,
+    ]);
+    $client = new StubBirClient(companies: [$firstCompany, $secondCompany]);
+    $service = new BirRegonService($client);
+
+    $byNip = $service->forNip('1234567890')->get();
+    $byRegon = $service->forRegon('123456789')->search();
+    $byKrs = $service->forKrs('0000123456')->get();
+
+    expect($byNip)->toHaveCount(2)
+        ->and($byRegon)->toHaveCount(2)
+        ->and($byKrs)->toHaveCount(2)
+        ->and($byNip->pluck('regon')->all())->toBe(['123456789', '987654321'])
+        ->and($byRegon->pluck('regon')->all())->toBe(['123456789', '987654321'])
+        ->and($byKrs->pluck('regon')->all())->toBe(['123456789', '987654321'])
+        ->and($client->calls)->toBe([
+            ['searchByNip', '1234567890'],
+            ['searchByRegon', '123456789'],
+            ['searchByKrs', '0000123456'],
+        ]);
 });
 
 it('routes sandbox queries through the stable sandbox client', function (): void {
@@ -36,8 +71,10 @@ it('routes sandbox queries through the stable sandbox client', function (): void
     $firstResult = $sandbox->forRegon('123456789')->get();
     $secondResult = $sandbox->forRegon('123456789')->get();
 
-    expect($firstResult)->toBe($company)
-        ->and($secondResult)->toBe($company)
+    expect($firstResult)->toHaveCount(1)
+        ->and($firstResult->sole())->toBe($company)
+        ->and($secondResult)->toHaveCount(1)
+        ->and($secondResult->sole())->toBe($company)
         ->and($service->sandbox())->toBe($sandbox)
         ->and($sandbox->sandbox())->toBe($sandbox)
         ->and($productionClient->calls)->toBe([])
@@ -47,9 +84,25 @@ it('routes sandbox queries through the stable sandbox client', function (): void
         ]);
 });
 
+it('rejects using one client instance for production and sandbox', function (): void {
+    $client = new StubBirClient;
+
+    expect(fn () => new BirRegonService($client, $client))
+        ->toThrow(
+            InvalidArgumentException::class,
+            'Production and sandbox BIR clients must be different instances.',
+        );
+});
+
 it('fetches a full report after searching by NIP', function (): void {
     $company = makeCompanyData(['regon' => '111222333']);
-    $report = new FullCompanyReportData($company, [['status' => 'ok']]);
+    $reportData = [['praw_regon9' => $company->regon]];
+    $report = new FullCompanyReportData(
+        $company,
+        ReportType::Organization,
+        $reportData,
+        (new FullReportNormalizer)->normalize(ReportType::Organization, $reportData),
+    );
     $client = new StubBirClient(company: $company, report: $report);
     $service = new BirRegonService($client);
 
@@ -63,10 +116,62 @@ it('fetches a full report after searching by NIP', function (): void {
         ]);
 });
 
+it('fetches every full report through each singular identifier builder', function (
+    Closure $builder,
+    array $expectedCall,
+): void {
+    $firstCompany = makeCompanyData(['regon' => '111222333']);
+    $secondCompany = makeCompanyData(['regon' => '444555666']);
+    $firstData = [['praw_regon9' => $firstCompany->regon]];
+    $secondData = [['praw_regon9' => $secondCompany->regon]];
+    $firstReport = new FullCompanyReportData(
+        $firstCompany,
+        ReportType::Organization,
+        $firstData,
+        (new FullReportNormalizer)->normalize(ReportType::Organization, $firstData),
+    );
+    $secondReport = new FullCompanyReportData(
+        $secondCompany,
+        ReportType::Organization,
+        $secondData,
+        (new FullReportNormalizer)->normalize(ReportType::Organization, $secondData),
+    );
+    $client = new StubBirClient(reports: [$firstReport, $secondReport]);
+    $service = new BirRegonService($client);
+
+    $reports = $builder($service)
+        ->reportType(ReportType::Organization)
+        ->getFullReports();
+
+    expect($reports)->toBeInstanceOf(Collection::class)->toHaveCount(2)
+        ->and($reports->all())->toBe([$firstReport, $secondReport])
+        ->and($client->calls)->toBe([$expectedCall]);
+})->with([
+    'NIP' => [
+        static fn (BirRegonService $service) => $service->forNip('1234567890'),
+        ['getFullReportsByNip', '1234567890', ReportType::Organization],
+    ],
+    'KRS' => [
+        static fn (BirRegonService $service) => $service->forKrs('0000123456'),
+        ['getFullReportsByKrs', '0000123456', ReportType::Organization],
+    ],
+    'REGON' => [
+        static fn (BirRegonService $service) => $service->forRegon('123456789'),
+        ['getFullReports', '123456789', ReportType::Organization],
+    ],
+]);
+
 it('requires a report type before fetching a full report', function (): void {
     $service = new BirRegonService(new StubBirClient);
 
     expect(fn () => $service->forRegon('123456789')->getFullReport())
+        ->toThrow(BirException::class, 'Report type is required');
+});
+
+it('requires a report type before fetching plural full reports', function (): void {
+    $service = new BirRegonService(new StubBirClient);
+
+    expect(fn () => $service->forRegon('123456789')->getFullReports())
         ->toThrow(BirException::class, 'Report type is required');
 });
 
@@ -77,9 +182,17 @@ it('exposes the fluent API through the facade', function (): void {
     BirRegon::swap(new BirRegonService($client));
 
     $result = BirRegon::forNip('1234567890')->search();
+    $loggedOut = BirRegon::logout();
+    $facadeDoc = (new ReflectionClass(BirRegon::class))->getDocComment();
 
-    expect($result)->toBe($company)
-        ->and($client->calls)->toBe([['searchByNip', '1234567890']]);
+    expect($result)->toHaveCount(1)
+        ->and($result->sole())->toBe($company)
+        ->and($loggedOut)->toBeTrue()
+        ->and($facadeDoc)->toBeString()->toContain('@method static bool logout()')
+        ->and($client->calls)->toBe([
+            ['searchByNip', '1234567890'],
+            ['logout'],
+        ]);
 });
 
 it('supports all fluent batch search variants', function (): void {
@@ -92,7 +205,7 @@ it('supports all fluent batch search variants', function (): void {
     $byRegons9 = $service->forRegons9(['123456789'])->get();
     $byRegons14 = $service->forRegons14(['12345678901234'])->get();
 
-    expect($byNips)->toBeInstanceOf(Collection::class)->toHaveCount(1)
+    expect($byNips)->toHaveCount(1)
         ->and($byKrsNumbers)->toHaveCount(1)
         ->and($byRegons9)->toHaveCount(1)
         ->and($byRegons14)->toHaveCount(1)
@@ -165,10 +278,10 @@ function makeCompanyData(array $overrides = []): CompanyData
         'province' => null,
         'district' => null,
         'commune' => null,
-        'type' => null,
+        'type' => EntityType::LegalUnit,
         'regon14' => null,
         'nipStatus' => null,
-        'silo' => 0,
+        'silo' => Silo::LegalUnits,
         'activityEndDate' => null,
         'postCity' => null,
     ], $overrides);

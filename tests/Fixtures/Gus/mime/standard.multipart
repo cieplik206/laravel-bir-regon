@@ -1,0 +1,20 @@
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="bir-fixture-boundary"; type="application/xop+xml"; start="<soap-root@bir.fixture>"; start-info="application/soap+xml"
+
+--bir-fixture-boundary
+Content-Type: application/xop+xml; charset=UTF-8; type="application/soap+xml"
+Content-Transfer-Encoding: 8bit
+Content-ID: <soap-root@bir.fixture>
+
+<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://www.w3.org/2005/08/addressing">
+  <s:Header>
+    <a:Action s:mustUnderstand="1">http://CIS/BIR/PUBL/2014/07/IUslugaBIRzewnPubl/ZalogujResponse</a:Action>
+  </s:Header>
+  <s:Body>
+    <ZalogujResponse xmlns="http://CIS/BIR/PUBL/2014/07">
+      <ZalogujResult>fixtureSession000001</ZalogujResult>
+    </ZalogujResponse>
+  </s:Body>
+</s:Envelope>
+--bir-fixture-boundary--

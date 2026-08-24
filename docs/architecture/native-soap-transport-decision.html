@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=yes"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <title>ADR: natywny transport SOAP dla GUS BIR 1.2</title>
+    <script src="../plans/report-document.js"></script>
+    <link rel="stylesheet" href="../plans/report-document.css" />
+  </head>
+  <body>
+    <header id="title-block-header">
+      <h1 class="title">ADR: natywny transport SOAP dla GUS BIR 1.2</h1>
+      <p>Decyzja przyjęta 2026-08-23</p>
+    </header>
+
+    <nav id="TOC" role="doc-toc">
+      <h2>Spis treści</h2>
+      <ul>
+        <li><a href="#kontekst">Kontekst</a></li>
+        <li><a href="#decyzja">Decyzja</a></li>
+        <li><a href="#kontrakt-domenowy">Kontrakt domenowy</a></li>
+        <li><a href="#limiter">Limiter żądań</a></li>
+        <li><a href="#odrzucone">Odrzucone warianty</a></li>
+        <li><a href="#bezpieczenstwo">Granice bezpieczeństwa</a></li>
+        <li><a href="#dowody">Dowody i weryfikacja</a></li>
+        <li><a href="#konsekwencje">Konsekwencje</a></li>
+      </ul>
+    </nav>
+
+    <section id="kontekst" class="level2">
+      <h2>Kontekst</h2>
+      <p>
+        Wersja 1.x delegowała komunikację z GUS do
+        <code>gusapi/gusapi</code>. Utrudniało to pełną kontrolę nad cyklem
+        życia klucza i SID, klasyfikacją pustych odpowiedzi, dekodowaniem MTOM
+        oraz stabilnością publicznego API pakietu.
+      </p>
+      <div class="business-logic-block">
+        Produkcyjny klucz, identyfikator sesji i surowe XML nie mogą trafić do
+        komunikatu wyjątku, jego poprzedniej przyczyny, stosu, debug output ani
+        serializowanego payloadu aplikacji.
+      </div>
+    </section>
+
+    <section id="decyzja" class="level2">
+      <h2>Decyzja</h2>
+      <p>
+        Pakiet używa własnego, ograniczonego transportu HTTP opartego na
+        libcurl. Koperty SOAP 1.2 i nagłówki WS-Addressing buduje
+        <code>SoapEnvelopeBuilder</code>,
+        <code>CurlBirHttpSender</code> wykonuje pojedyncze żądanie do endpointu
+        wybranego przez zamknięty enum, a
+        <code>SoapResponseDecoder</code> klasyfikuje zwykłe XML i
+        <code>multipart/related</code>. Wewnętrzny XML raportów dekoduje osobna
+        warstwa.
+      </p>
+      <p>
+        Sender utrzymuje jeden uchwyt cURL w obrębie scope klienta i resetuje go
+        przed oraz po każdym żądaniu. Dzięki temu libcurl może ponownie użyć
+        połączenia, cache DNS i sesji TLS, natomiast body, callbacki, nagłówki i
+        <code>sid</code> nie przechodzą do następnej operacji.
+      </p>
+      <p>
+        Konfiguracja transportu jest walidowana bez niejawnego lub stratnego
+        rzutowania i bez clampowania. Dopuszcza <code>1..60</code> sekund na
+        połączenie, <code>1..300</code> sekund na całe żądanie oraz
+        <code>1..50000000</code> bajtów odpowiedzi. Wartość spoza zakresu kończy
+        konstrukcję przed otwarciem połączenia. Sender wymaga TLS 1.2 lub
+        nowszego zarówno dla endpointu GUS, jak i dla jawnego albo wykrytego
+        przez libcurl proxy HTTPS.
+      </p>
+      <p>
+        <code>CurlBirHttpSender</code> przekazuje nagłówki, w tym opcjonalny
+        <code>sid</code>, oraz kopertę XML do krótkiej granicy
+        <code>NativeCurlExecutor::execute()</code>. Oba parametry są oznaczone
+        <code>#[SensitiveParameter]</code>; executor tylko ustawia wrażliwe
+        opcje i wykonuje cURL, a sender resetuje uchwyt w bloku
+        <code>finally</code>. Granica I/O jest zatem jawna i osłonięta, ale nie
+        udaje, że XML ani SID nigdy nie są jej argumentami.
+      </p>
+      <p>
+        Oficjalne WSDL i XSD służą do weryfikacji kontraktu oraz fixtures, ale
+        nie są kopiowane do dystrybucji. Eliminuje to zdalne pobieranie WSDL w
+        runtime, cache WSDL i niejasność dotyczącą redystrybucji plików GUS.
+      </p>
+    </section>
+
+    <section id="kontrakt-domenowy" class="level2">
+      <h2>Kontrakt domenowy</h2>
+      <ul>
+        <li>
+          Wyszukiwanie jednego NIP, REGON albo KRS zwraca kolekcję, ponieważ
+          jeden identyfikator może odpowiadać wielu typom podmiotu lub silosom.
+          Żaden rekord nie jest arbitralnie odrzucany.
+        </li>
+        <li>
+          Pełne raporty mają wariant pluralny. Wariant singularny zgłasza
+          <code>BirAmbiguousResultException</code>, gdy istnieje więcej niż
+          jeden odrębny zgodny REGON raportowy.
+        </li>
+        <li>
+          <code>EntityType</code> używa przypadków <code>LegalUnit</code>,
+          <code>NaturalPerson</code>, <code>LegalUnitLocalUnit</code> i
+          <code>NaturalPersonLocalUnit</code>, a silos 6 nazywa się
+          <code>Silo::LegalUnits</code>. Niepusty <code>NipStatus</code> także
+          jest enumem zgodnym z XSD. REGON-14 jest nullable i występuje tylko
+          wtedy, gdy GUS rzeczywiście go zwrócił. Data zakończenia działalności
+          zachowuje znormalizowaną postać leksykalną <code>xs:date</code>:
+          <code>YYYY-MM-DD</code> z opcjonalnym <code>Z</code> albo offsetem
+          strefy czasowej.
+        </li>
+        <li>
+          Walidacja formatu identyfikatorów jest obowiązkowa; kontrola sum NIP i
+          REGON pozostaje opcjonalna. Dla REGON-14 sprawdzany jest także
+          osadzony REGON-9. KRS nie ma analogicznej sumy kontrolnej.
+        </li>
+        <li>
+          Pełny raport zachowuje surowe wiersze GUS i równolegle udostępnia
+          znormalizowane DTO dla wspólnych struktur. Wersja klasyfikacji PKD
+          pozostaje nullable <code>string</code> o długości najwyżej 8 znaków,
+          zamiast zamkniętego enuma. Liczby działalności i jednostek lokalnych
+          są nullable <code>int</code>, nie tekstem. Puste albo zawierające
+          wyłącznie nieznane pola wiersze pozostają w danych surowych, lecz nie
+          tworzą pozornie wypełnionych obiektów ani elementów listy w projekcji
+          znormalizowanej. Surowe pola zapewniają kompatybilność z przyszłymi
+          rozszerzeniami XSD.
+        </li>
+      </ul>
+    </section>
+
+    <section id="limiter" class="level2">
+      <h2>Limiter żądań</h2>
+      <p>
+        Klient rozwiązywany przez Laravel używa domyślnie
+        <code>CacheBirRequestLimiter</code>. Stan jest współdzielony przez cache
+        obsługujący atomowe blokady, rozdzielony według środowiska i skrótu
+        klucza API. Konserwatywny lokalny model waży koszt operacji, modeluje
+        budżet sekundowy przez czas teoretycznego nadejścia podobny do GCRA, a
+        budżety minutowy i godzinowy prowadzi w stałych oknach kalendarzowych
+        według czasu <code>Europe/Warsaw</code>. Początek okna jest zapisywany
+        jako epoka, dzięki czemu dwie powtórzone godziny podczas zmiany czasu
+        nie współdzielą licznika. Jest to lokalny mechanizm dopuszczenia
+        wyprowadzony z opublikowanych limitów, a nie deklaracja dokładnego,
+        nieopublikowanego algorytmu serwera GUS. Każda operacja SOAP kosztuje
+        jedną jednostkę, zaś wyszukiwanie batch kosztuje tyle jednostek, ile
+        zawiera identyfikatorów.
+      </p>
+      <div class="business-logic-block">
+        Poza wewnętrznym scope pojedyncze <code>acquire()</code> może wykonać
+        pacing długu sekundowego łącznie przez najwyżej 1 sekundę, zawsze po
+        zwolnieniu locka. Gateway otwiera i zamyka wielowywołaniowy scope przez
+        jawne <code>beginRateLimitScope()</code> i
+        <code>endRateLimitScope()</code> w <code>try/finally</code>, bez bound
+        closure przechwytującego klienta lub sesję. Po pierwszej udanej
+        rezerwacji w tym scope każde następne, wewnętrzne
+        <code>acquire()</code> może czekać łącznie do 7 sekund. Diagnostyka i
+        recovery obejmują kilka takich rezerwacji, więc całe wywołanie może
+        trwać dłużej niż 7 sekund. Okna minutowe i godzinowe nie są usypiane;
+        ich wyczerpanie albo przekroczenie dopuszczalnego pacingu zgłasza
+        <code>BirRateLimitException</code> przed siecią.
+      </div>
+      <p>
+        Limiter akceptuje wyłącznie obiekt o dokładnej klasie
+        <code>Illuminate\Cache\Repository</code> i store z allowlisty:
+        <code>ArrayStore</code>, <code>DatabaseStore</code>,
+        <code>FileStore</code>, <code>MemcachedStore</code> albo
+        <code>RedisStore</code>, który zarazem implementuje
+        <code>LockProvider</code>. Dekoratory i inne implementacje, między
+        innymi <code>TaggedCache</code>, <code>DynamoDbStore</code>,
+        <code>FailoverStore</code>, <code>MemoizedStore</code> oraz
+        <code>NullStore</code>, kończą operację fail closed. Lease locka trwa 30
+        sekund, oczekiwanie przy contention najwyżej 1 sekundę, a własność jest
+        ponownie sprawdzana przed zapisem stanu i po nim.
+      </p>
+      <p>
+        W aplikacji wielohostowej zalecany jest jeden współdzielony Redis. Store
+        lokalny, taki jak pamięć albo pliki, nie koordynuje niezależnych hostów.
+        Fail closed dla dekoratorów i store spoza allowlisty zapobiega
+        przypadkowemu rozdzieleniu globalnego budżetu między backendy.
+      </p>
+      <p>
+        Ręcznie konstruowany <code>NativeSoapTransport</code> wymaga jawnej
+        implementacji <code>BirRequestLimiterInterface</code>; nie istnieje
+        niejawny fallback bez limitu. <code>UnlimitedBirRequestLimiter</code>
+        pozostaje świadomym opt-outem wyłącznie dla testu bez sieci albo
+        integracji, w której inna warstwa koordynuje wszystkich użytkowników
+        danego klucza.
+      </p>
+    </section>
+
+    <section id="odrzucone" class="level2">
+      <h2>Odrzucone warianty</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Wariant</th>
+            <th>Powód odrzucenia</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Dalsze użycie <code>gusapi/gusapi</code></td>
+            <td>
+              Brak pełnej kontroli nad sekretami, sesją, wyjątkami i publicznymi
+              typami pakietu.
+            </td>
+          </tr>
+          <tr>
+            <td>Zdalne WSDL w runtime</td>
+            <td>
+              Dodatkowy punkt awarii, zależność od sieci przed operacją oraz
+              trudniejsze timeouty i cache.
+            </td>
+          </tr>
+          <tr>
+            <td>Dołączone WSDL/XSD</td>
+            <td>
+              Nie jest potrzebne do wykonania sześciu znanych operacji, a
+              wymagałoby odrębnej decyzji o pochodzeniu i redystrybucji.
+            </td>
+          </tr>
+          <tr>
+            <td><code>SoapClient::__doRequest()</code></td>
+            <td>
+              Przechowuje pełne body poza kontrolą limitu strumieniowego, nie
+              daje twardego deadline'u całej wymiany i może udostępnić argument
+              XML globalnemu handlerowi błędów przed przechwyceniem wyjątku.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="bezpieczenstwo" class="level2">
+      <h2>Granice bezpieczeństwa</h2>
+      <ul>
+        <li>
+          Endpointy są stałe dla produkcji i sandboxa; brak dowolnego URL.
+        </li>
+        <li>
+          TLS 1.2 lub nowszy weryfikuje certyfikat i nazwę hosta GUS oraz proxy
+          HTTPS, a przekierowania są wyłączone.
+        </li>
+        <li>
+          cURL wymusza HTTPS, pełną weryfikację TLS, brak przekierowań,
+          skończony deadline oraz limit body egzekwowany podczas odbioru.
+        </li>
+        <li>
+          Klucz, SID, XML i body odpowiedzi są oznaczone jako wrażliwe lub
+          przechowywane w <code>SensitiveParameterValue</code>.
+        </li>
+        <li>
+          NIP, REGON i KRS nie są powtarzane w komunikatach ani właściwościach
+          wyjątków not-found i ambiguity. Każda natywna ramka przenosząca
+          identyfikator, kryterium lub parametry operacji używa
+          <code>#[SensitiveParameter]</code>.
+        </li>
+        <li>
+          Wyjątki warstwy systemowej są przechwytywane przed opuszczeniem
+          transportu i nie są zachowywane jako <code>previous</code>.
+        </li>
+        <li>
+          Parser odrzuca DOCTYPE, encje zewnętrzne, nieprawidłowy SOAP Fault,
+          nierozwiązane XOP, brak lub niezgodność akcji WS-Addressing,
+          <code>xsi:nil</code> sprzeczne z WSDL, niejednoznaczne części MIME i
+          payload przekraczający limit. Poprawny SOAP Fault zachowuje wyłącznie
+          standardowy kod enuma; Reason i Detail są odrzucane.
+        </li>
+        <li>
+          Transport, builder koperty, gateway i stan sesji odrzucają użycie po
+          deserializacji, a ich bezsekretowe tombstone pozostają bezpieczne do
+          inspekcji diagnostycznej.
+        </li>
+        <li>
+          Wszystkie teksty pochodzące z GUS pozostają niezaufanym inputem:
+          surowe i znormalizowane pola raportu, nazwy, komunikaty diagnostyczne
+          oraz komunikaty statusu usługi. Parser ich nie sanitizuje; aplikacja
+          musi stosować kodowanie właściwe dla kontekstu HTML, parametry SQL,
+          parsować URL-e i dopuszczać wyłącznie schematy HTTP/HTTPS, walidować
+          adresy przed utworzeniem <code>mailto:</code>, chronić CSV przed
+          formułami oraz neutralizować znaki sterujące i używać pól
+          strukturalnych przy logowaniu, aby uniknąć log forging.
+        </li>
+      </ul>
+    </section>
+
+    <section id="dowody" class="level2">
+      <h2>Dowody i weryfikacja</h2>
+      <ul>
+        <li>
+          Fixtures zostały napisane dla pakietu i porównane z oficjalnym WSDL,
+          XSD oraz instrukcją GUS BIR 1.2 z 2025-12-31.
+        </li>
+        <li>
+          Ponad 700 testów deterministycznych obejmuje wszystkie operacje,
+          siedem kryteriów wyszukiwania, MIME/MTOM, framing HTTP, błędy,
+          XXE/DTD, limity body i żądań, wielosilosowe kolekcje, pluralne
+          raporty, ścisłe enumy, normalizację DTO, sesję, logout i jeden retry.
+        </li>
+        <li>
+          Testy canary działają z <code>zend.exception_ignore_args=0</code> i
+          przeszukują cały graf wyjątków oraz obiektów.
+        </li>
+        <li>
+          Rzeczywisty sandbox potwierdził status usługi, NIP, REGON-9, KRS i ich
+          dostępne warianty batch, pełny raport oraz diagnostykę przez natywny
+          transport.
+        </li>
+      </ul>
+    </section>
+
+    <section id="konsekwencje" class="level2">
+      <h2>Konsekwencje</h2>
+      <ul>
+        <li>
+          <code>ext-curl</code>, <code>ext-dom</code> i
+          <code>ext-libxml</code> są jawnymi wymaganiami runtime;
+          <code>ext-soap</code> ani <code>ext-openssl</code> nie są wymagane.
+          HTTPS i TLS realizuje <code>ext-curl</code> przez backend libcurl
+          dostępny na danej platformie.
+        </li>
+        <li>
+          Zmiana usuwa factory i mappery zależne od GusApi, dlatego wymaga
+          wydania głównego 2.0 oraz przewodnika migracji.
+        </li>
+        <li>
+          Zmiany w oficjalnym protokole wymagają aktualizacji enumów, buildera,
+          decoderów, fixtures i prób sandboxowych w jednym zakresie.
+        </li>
+        <li>
+          Wielohostowa aplikacja Laravel powinna wskazać jeden współdzielony
+          Redis z atomowymi lockami. Dokładna klasa repository i allowlista
+          store są celowym ograniczeniem; dekorator, lokalny store użyty na
+          kilku hostach albo nieobsługiwany backend kończy operację bez
+          połączenia z GUS.
+        </li>
+        <li>
+          Zewnętrzne transporty muszą samodzielnie spełnić kontrakt
+          <code>BirSoapTransportInterface</code> i te same wymagania dotyczące
+          sekretów.
+        </li>
+      </ul>
+    </section>
+  </body>
+</html>

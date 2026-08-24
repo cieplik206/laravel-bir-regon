@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <dane>
+    <ErrorCode>4</ErrorCode>
+    <ErrorMessagePl>Brak fikcyjnego podmiotu dla podanych kryteriów.</ErrorMessagePl>
+    <ErrorMessageEn>No fixture entity matches the supplied criteria.</ErrorMessageEn>
+    <Nip>0000000000</Nip>
+  </dane>
+</root>

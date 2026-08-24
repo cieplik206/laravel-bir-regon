@@ -1,7 +1,8 @@
 # Contributing
 
 Contributions are welcome. Please keep pull requests focused and include tests
-for changed behavior.
+for changed behavior. Review is performed on a best-effort basis without a
+guaranteed response or merge timeframe; see [SUPPORT.md](SUPPORT.md).
 
 ## Local development
 
@@ -11,19 +12,25 @@ Fork and clone the repository, then install its dependencies:
 composer install
 ```
 
-The package is tested with Orchestra Testbench, so a separate Laravel
-application is not required.
+The runtime package supports PHP 8.4.0 or newer. The complete Pest 5
+development graph requires PHP 8.4.1 or newer because of its Symfony Process
+dependency. The package is tested with Orchestra Testbench, so a separate
+Laravel application is not required for the normal development suite.
 
 ## Quality checks
 
 Run the local checks before opening a pull request:
 
 ```bash
-composer format
-composer analyse
+vendor/bin/pint --test
+composer analyse -- --no-progress
 composer test
-composer validate --strict
+composer validate --strict --no-check-publish
+composer audit
 ```
+
+Run `composer format` only when you intend to apply formatting changes, then
+review the resulting diff before committing it.
 
 The default suite is isolated and does not access the network.
 

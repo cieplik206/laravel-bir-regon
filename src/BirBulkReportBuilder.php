@@ -14,7 +14,7 @@ class BirBulkReportBuilder extends BirRequestBuilder
     private ?BulkReportType $reportType = null;
 
     public function __construct(
-        BirClientInterface $client,
+        #[\SensitiveParameter] BirClientInterface $client,
         private readonly DateTimeImmutable $date,
     ) {
         parent::__construct($client);
@@ -22,6 +22,8 @@ class BirBulkReportBuilder extends BirRequestBuilder
 
     public function reportType(BulkReportType $reportType): self
     {
+        $this->ensureNotRestoredFromSerialization();
+
         $this->reportType = $reportType;
 
         return $this;
@@ -34,10 +36,12 @@ class BirBulkReportBuilder extends BirRequestBuilder
 
     public function getBulkReport(): BulkReportData
     {
+        $client = $this->getClient();
+
         if ($this->reportType === null) {
             throw new BirException('Report type is required to fetch bulk report.');
         }
 
-        return $this->client->getBulkReport($this->date, $this->reportType);
+        return $client->getBulkReport($this->date, $this->reportType);
     }
 }

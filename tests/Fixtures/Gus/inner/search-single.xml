@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <dane>
+    <Regon>012345678</Regon>
+    <Nip>0123456789</Nip>
+    <StatusNip />
+    <Nazwa>FIKCYJNA SPÓŁKA TESTOWA</Nazwa>
+    <Wojewodztwo>MAZOWIECKIE</Wojewodztwo>
+    <Powiat>testowy</Powiat>
+    <Gmina>Gmina Testowa</Gmina>
+    <Miejscowosc>Testowo</Miejscowosc>
+    <KodPocztowy>00-001</KodPocztowy>
+    <Ulica>ul. Przykładowa</Ulica>
+    <NrNieruchomosci>1</NrNieruchomosci>
+    <NrLokalu />
+    <Typ>P</Typ>
+    <SilosID>6</SilosID>
+    <MiejscowoscPoczty>Testowo</MiejscowoscPoczty>
+  </dane>
+</root>

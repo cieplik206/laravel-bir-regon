@@ -11,12 +11,16 @@ documentation into every conversation.
 
 The `bir-regon-development` skill describes:
 
-- the fluent NIP, REGON, and KRS search API
+- the fluent NIP, REGON, and KRS search API, including multiple silo results
 - batch searches and their identifier limits
-- full and bulk report workflows
-- isolated production and sandbox clients with reusable sessions
-- typed `spatie/laravel-data` responses
-- exception handling and dependency injection
+- plural and intentionally singular full-report workflows
+- strict response enums, raw report rows, and normalized report DTOs
+- safe handling of every public GUS string in HTML, SQL, links, email,
+  spreadsheets, and logs
+- isolated production and sandbox clients with reusable sessions and cURL
+  connections
+- optional checksum validation and cache-backed request limits
+- exception handling, retry backoff, and dependency injection
 - isolated tests and opt-in sandbox tests
 
 The source is distributed with the package at:

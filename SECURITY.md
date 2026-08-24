@@ -20,9 +20,17 @@ sandbox values.
 
 ## Supported versions
 
-Security fixes are provided for the latest release in the `1.x` line.
+The latest `2.x` release is the supported stable line. The latest `1.1.x`
+release remains eligible for security fixes during a three-month migration
+period ending on 2026-11-24. This eligibility is a best-effort maintenance
+policy, not a service-level commitment.
 
 | Version | Supported |
 | --- | --- |
-| 1.x | Yes |
-| < 1.0 | No |
+| Latest 2.x release | Yes |
+| Latest 1.1.x release | Security fixes through 2026-11-24 |
+| 1.0.x and older | No |
+
+Users of version 1 should migrate to version 2 before 2026-11-24. See the
+[2.0 upgrade guide](UPGRADE-2.0.md) for the breaking changes and required
+platform upgrade.

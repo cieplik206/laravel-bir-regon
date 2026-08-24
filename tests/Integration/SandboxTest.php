@@ -9,6 +9,7 @@ use cieplik206\BirRegon\Facades\BirRegon;
 const SANDBOX_NIP = '7740001454';
 const SANDBOX_REGON = '610188201';
 const SANDBOX_KRS = '0000028860';
+const SANDBOX_HISTORICAL_NATURAL_PERSON_REGON = '771504670';
 
 beforeEach(function (): void {
     config()->set('bir-regon.sandbox_api_key', sandboxApiKey());
@@ -32,15 +33,15 @@ it('searches the GUS sandbox with every identifier variant', function (): void {
     $byKrsNumbers = $sandbox->forKrsNumbers([SANDBOX_KRS])->get();
     $byRegons = $sandbox->forRegons9([SANDBOX_REGON])->get();
 
-    expect($byNip->regon)->toBe(SANDBOX_REGON)
-        ->and($byRegon->nip)->toBe(SANDBOX_NIP)
-        ->and($byKrs->regon)->toBe(SANDBOX_REGON)
+    expect($byNip->sole()->regon)->toBe(SANDBOX_REGON)
+        ->and($byRegon->sole()->nip)->toBe(SANDBOX_NIP)
+        ->and($byKrs->sole()->regon)->toBe(SANDBOX_REGON)
         ->and($byNips)->toHaveCount(1)
-        ->and($byNips->first()?->regon)->toBe(SANDBOX_REGON)
+        ->and($byNips->sole()->regon)->toBe(SANDBOX_REGON)
         ->and($byKrsNumbers)->toHaveCount(1)
-        ->and($byKrsNumbers->first()?->regon)->toBe(SANDBOX_REGON)
+        ->and($byKrsNumbers->sole()->regon)->toBe(SANDBOX_REGON)
         ->and($byRegons)->toHaveCount(1)
-        ->and($byRegons->first()?->regon)->toBe(SANDBOX_REGON);
+        ->and($byRegons->sole()->regon)->toBe(SANDBOX_REGON);
 })->group('sandbox');
 
 it('fetches a full company report from the GUS sandbox', function (): void {
@@ -52,6 +53,19 @@ it('fetches a full company report from the GUS sandbox', function (): void {
     expect($report->basicData->regon)->toBe(SANDBOX_REGON)
         ->and($report->reportData)->not->toBeEmpty()
         ->and($report->reportData[0]['praw_regon9'])->toBe(SANDBOX_REGON);
+})->group('sandbox');
+
+it('fetches the general natural-person report for a historical sandbox record', function (): void {
+    $report = BirRegon::sandbox()
+        ->forRegon(SANDBOX_HISTORICAL_NATURAL_PERSON_REGON)
+        ->reportType(ReportType::NaturalPerson)
+        ->getFullReport();
+
+    expect($report->basicData->regon)->toBe(SANDBOX_HISTORICAL_NATURAL_PERSON_REGON)
+        ->and($report->basicData->silo->value)->toBe(4)
+        ->and($report->reportData)->not->toBeEmpty()
+        ->and($report->reportData[0]['fiz_regon9'])
+        ->toBe(SANDBOX_HISTORICAL_NATURAL_PERSON_REGON);
 })->group('sandbox');
 
 it('reads diagnostics after an unsuccessful sandbox search', function (): void {

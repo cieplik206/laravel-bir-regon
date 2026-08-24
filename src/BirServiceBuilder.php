@@ -16,11 +16,11 @@ class BirServiceBuilder extends BirRequestBuilder
 
     public function status(): ServiceStatusData
     {
-        return $this->client->getServiceStatus();
+        return $this->getClient()->getServiceStatus();
     }
 
     public function dataStatus(): DateTimeImmutable
     {
-        return $this->client->getDataStatus();
+        return $this->getClient()->getDataStatus();
     }
 }

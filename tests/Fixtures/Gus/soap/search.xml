@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://www.w3.org/2005/08/addressing">
+  <s:Header>
+    <a:Action s:mustUnderstand="1">http://CIS/BIR/PUBL/2014/07/IUslugaBIRzewnPubl/DaneSzukajPodmiotyResponse</a:Action>
+  </s:Header>
+  <s:Body>
+    <DaneSzukajPodmiotyResponse xmlns="http://CIS/BIR/PUBL/2014/07">
+      <DaneSzukajPodmiotyResult><![CDATA[<root>
+  <dane>
+    <Regon>012345678</Regon>
+    <Nip>0123456789</Nip>
+    <StatusNip />
+    <Nazwa>FIKCYJNA SPÓŁKA TESTOWA</Nazwa>
+    <Wojewodztwo>MAZOWIECKIE</Wojewodztwo>
+    <Powiat>testowy</Powiat>
+    <Gmina>Gmina Testowa</Gmina>
+    <Miejscowosc>Testowo</Miejscowosc>
+    <KodPocztowy>00-001</KodPocztowy>
+    <Ulica>ul. Przykładowa</Ulica>
+    <NrNieruchomosci>1</NrNieruchomosci>
+    <NrLokalu />
+    <Typ>P</Typ>
+    <SilosID>6</SilosID>
+    <MiejscowoscPoczty>Testowo</MiejscowoscPoczty>
+  </dane>
+</root>]]></DaneSzukajPodmiotyResult>
+    </DaneSzukajPodmiotyResponse>
+  </s:Body>
+</s:Envelope>

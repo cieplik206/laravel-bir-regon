@@ -7,7 +7,7 @@ the Polish GUS BIR/REGON SOAP API. It provides fluent searches by NIP, REGON,
 and KRS, batch searches, full and bulk reports, service diagnostics, and typed
 `spatie/laravel-data` responses.
 
-The package targets PHP 8.3 or newer and Laravel 12 or 13. Preserve its public
+Version 2 targets PHP 8.4 or newer and Laravel 13. Preserve its public
 API, Laravel auto-discovery, and production/sandbox separation unless a
 breaking change is explicitly requested.
 
@@ -15,8 +15,11 @@ breaking change is explicitly requested.
 
 - `src/` contains the package implementation under the
   `cieplik206\BirRegon` namespace.
-- `src/BirClient.php` owns GUS communication, authentication, session reuse,
-  recovery, response mapping, and exception translation.
+- `src/BirClient.php` maps the public package API onto the native gateway and
+  consumer-facing data objects.
+- `src/Transport/`, `src/Protocol/`, and `src/Gateway/` own SOAP communication,
+  strict response decoding, authentication, isolated session reuse, recovery,
+  and exception translation.
 - `src/BirRegonService.php` and the builder classes expose the fluent API.
 - `src/Data/`, `src/Enums/`, and `src/Exceptions/` are part of the consumer-facing
   contract. Treat changes to their constructors, values, and behavior as public
@@ -24,7 +27,7 @@ breaking change is explicitly requested.
 - `src/BirRegonServiceProvider.php`, `config/`, and `src/Facades/` contain the
   Laravel integration.
 - `tests/Unit/` covers focused value behavior, `tests/Feature/` covers package
-  behavior with Testbench and fake GUS clients, and `tests/Integration/` contains
+  behavior with Testbench and fake gateways/transports, and `tests/Integration/` contains
   opt-in tests against the live GUS sandbox.
 - `docs/` is the source for the documentation website. `README.md` is the short
   package overview.
@@ -38,6 +41,9 @@ Install dependencies with:
 ```bash
 composer install
 ```
+
+The runtime floor is PHP 8.4.0; the complete Pest 5 development graph requires
+PHP 8.4.1 or newer.
 
 Use the smallest relevant test while developing, then run the complete local
 quality suite before handing off a change:
@@ -65,8 +71,9 @@ Sandbox availability is external and intermittent, so a passing sandbox test
 must not replace deterministic unit or feature coverage.
 
 CI repeats formatting, PHPStan/Larastan, Composer validation and audit, plus the
-test suite on Laravel 12 and 13 across PHP 8.3, 8.4, and 8.5. PHP 8.3 covers
-both the lowest and highest dependency versions for each Laravel release.
+Pest 5 suite on Laravel 13 across PHP 8.4 and 8.5. PHP 8.4 covers the lowest and
+highest resolvable test toolchains. A separate runtime-only job resolves PHP
+8.4.0 with Illuminate Contracts and Support 13.0.0.
 
 ## Implementation conventions
 
@@ -75,14 +82,16 @@ both the lowest and highest dependency versions for each Laravel release.
 - Preserve the existing namespace casing and PSR-4 layout.
 - Prefer typed parameters, return types, enums, and data objects over untyped
   arrays at public boundaries.
-- Keep builders small and focused. Network calls, session state, and GUS
-  exception translation belong in the client layer.
+- Keep builders small and focused. Network calls belong in the transport,
+  session state and retry belong in the gateway, and public mapping belongs in
+  `BirClient`.
 - Preserve reusable but isolated production and sandbox clients. A change must
   not leak credentials or authenticated sessions between environments.
-- Keep transport-specific `gusapi/gusapi` objects out of the package's public
-  results where typed package data objects already exist.
-- Translate dependency failures into the package exception hierarchy when they
-  cross a public boundary. Preserve the previous exception as the cause.
+- Keep transport and protocol objects out of consumer-facing results where
+  typed package data objects already exist.
+- Translate transport and protocol failures into the package exception
+  hierarchy without retaining raw exceptions that may contain a key, SID,
+  request XML, response body, or sensitive trace arguments.
 - Do not add speculative abstractions or unrelated refactors to a focused fix.
 
 ## Testing rules
@@ -90,7 +99,7 @@ both the lowest and highest dependency versions for each Laravel release.
 - Add or update a Pest test for every behavior change.
 - A bug fix should include a regression test that fails for the old behavior
   and passes after the fix.
-- Model real dependency behavior in fakes. In particular, the GUS API can
+- Model real GUS behavior in fakes. In particular, the GUS API can
   represent some expired-session failures as empty decoded responses instead
   of exceptions; do not make every fake failure throw if production does not.
 - Test both the recovery path and the legitimate non-error path when an empty
@@ -173,12 +182,16 @@ versions from Git tags, so do not add a `version` field to `composer.json`.
 
 A release should be cut only from `main` after CI passes. Move the relevant
 entries out of `Unreleased`, set the release date and comparison links, create
-a signed annotated `vX.Y.Z` tag for the verified commit, and push the tag. The
-protected tag push triggers the `Release` workflow, which rejects lightweight
-or unverified tags, commits outside `main`, and commits without the required
-`CI Passed` check; it publishes immutable release assets and SHA-256 checksums.
-Verify the resulting release and that Packagist indexes the tag. Release
-operations always require explicit user authorization.
+a signed annotated `vX.Y.Z` tag for the verified commit, and push the tag. Tag
+pushes do not publish releases. With explicit user authorization, the owner
+must then send a `repository_dispatch` event of type `publish-release` with
+`client_payload.tag` set to that tag. The trusted default-branch `Release`
+workflow rejects lightweight, mismatched, or unverified tags, commits outside
+`main`, and commits without a successful push run of the exact
+`.github/workflows/ci.yml`; it revalidates the tag immediately before
+publishing immutable release assets and SHA-256 checksums. Verify the resulting
+release and that Packagist indexes the tag. Release operations always require
+explicit user authorization.
 
 ## Security and safe operation
 

@@ -11,11 +11,11 @@ use Spatie\LaravelData\Data;
 class BulkReportData extends Data
 {
     /**
-     * @param  array<int, string>  $reportData
+     * @param  list<string>  $reportData
      */
     public function __construct(
         public DateTimeImmutable $date,
         public BulkReportType $reportType,
-        public array $reportData,
+        #[\SensitiveParameter] public array $reportData,
     ) {}
 }
