@@ -128,12 +128,15 @@ most one second, verifies ownership around the state write, and fails closed
 rather than sending an uncoordinated request. The lock is not held while the
 limiter sleeps.
 
-Use one shared Redis store and prefix for queue workers or application
-instances on multiple hosts. `ArrayStore` and `FileStore` are local and do not
-coordinate separate hosts. A database or Memcached store coordinates only when
-every process really uses the same backend. The state identity contains the
-environment and a SHA-256 fingerprint of the API key, never the raw credential,
-so production, sandbox, and different API keys have independent budgets.
+Use one shared Redis store for queue workers or application instances on
+multiple hosts. Every host must use the same backend and database plus the same
+effective namespace for state and lock connections, including the Redis client
+(`REDIS_PREFIX`), Laravel cache (`CACHE_PREFIX`), and BIR prefixes. `ArrayStore`
+and `FileStore` are local and do not coordinate separate hosts. A database or
+Memcached store coordinates only when every process really uses the same
+backend. The state identity contains the environment and a SHA-256 fingerprint
+of the API key, never the raw credential, so production, sandbox, and different
+API keys have independent budgets.
 
 After changing these values in a cached application, rebuild its configuration
 cache:

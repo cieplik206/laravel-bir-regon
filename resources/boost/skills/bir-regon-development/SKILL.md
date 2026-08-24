@@ -7,8 +7,18 @@ description: Integrate Laravel applications with cieplik206/laravel-bir-regon an
 
 Use the package's fluent Laravel API. Keep SOAP transport, authentication, and
 session handling encapsulated by the package. Version 2 implements GUS BIR 1.2
-natively, requires PHP 8.4 or newer with Laravel 13, and does not install
-`gusapi/gusapi`. Applications on PHP 8.3 or Laravel 12 must use version 1.x.
+natively, requires PHP 8.4 or newer with Laravel 13 plus `ext-curl`, `ext-dom`,
+and `ext-libxml`, and does not install `gusapi/gusapi`. Applications that cannot
+leave PHP 8.3 or Laravel 12 can only remain on version 1.x; check
+`vendor/cieplik206/laravel-bir-regon/SECURITY.md` before describing that line as
+supported.
+
+For a 1.x to 2.x migration, first read
+`vendor/cieplik206/laravel-bir-regon/UPGRADE-2.0.md`. It covers removed
+GusApi-specific factories and mappers, the new direct-client graph, plural
+search/report results, strict enums and DTOs, scoped bindings, configuration,
+exceptions, and updated fakes. Do not infer a migration from current usage
+examples alone.
 
 For exhaustive details, read only the relevant page under
 `vendor/cieplik206/laravel-bir-regon/docs/`.
@@ -22,19 +32,36 @@ composer require cieplik206/laravel-bir-regon:^2.0
 ```
 
 ```dotenv
-BIR_API_KEY=your-api-key
-BIR_SANDBOX_API_KEY=your-test-key
+# Set the 20-character production key in the deployment environment.
+BIR_API_KEY=
 BIR_CONNECTION_TIMEOUT=10
 BIR_REQUEST_TIMEOUT=30
 BIR_MAX_RESPONSE_BYTES=10000000
+BIR_USER_AGENT=laravel-bir-regon/2
 BIR_IDENTIFIER_VALIDATION=format
 BIR_PROXY_URL=
 BIR_PROXY_USERNAME=
 BIR_PROXY_PASSWORD=
 BIR_RATE_LIMIT_ENABLED=true
-BIR_RATE_LIMIT_STORE=redis
 BIR_RATE_LIMIT_PREFIX=bir-regon:rate-limit
+# BIR_RATE_LIMIT_STORE=redis
 ```
+
+Production and overridden sandbox keys must contain exactly 20 ASCII letters
+or digits. The official public sandbox key is already the package default; set
+`BIR_SANDBOX_API_KEY` only when GUS provides a different test key. Leaving it
+unset uses that default, while an explicitly empty or malformed override fails
+instead of falling back. The user agent is optional and accepts 1-200 printable
+ASCII characters.
+
+When `BIR_RATE_LIMIT_STORE` is absent, the limiter uses the application's
+default cache store. Set it only to a configured store; use one shared Redis
+store for multi-host coordination. Every host must use the same Redis backend
+and database plus the same effective namespace for state and lock connections,
+including the Redis client (`REDIS_PREFIX`), Laravel cache (`CACHE_PREFIX`), and
+BIR prefixes. The BIR prefix accepts 1-100 ASCII letters, digits, `:`, `_`, or
+`-`. Rebuild Laravel's configuration cache after changing environment values
+in a cached deployment.
 
 Laravel discovers the service provider automatically. Publishing
 `config/bir-regon.php` is optional:
@@ -99,6 +126,39 @@ the decoder encounters `xsi:nil` there, return
 `TransportResponse::failure(TransportFailureType::Protocol, resultWasNil: true)`
 so the gateway does not retry a malformed response as an expired session.
 
+## Replacing package components
+
+Register custom dependencies before their first consumer is resolved: transport
+before gateway or client, gateway before client, and client before
+`BirRegonService` or the facade. Bind `BirClientInterface`,
+`BirGatewayInterface`, and `BirSoapTransportInterface` as scoped services:
+
+```php
+use App\Bir\CustomBirGateway;
+use cieplik206\BirRegon\Contracts\BirGatewayInterface;
+
+$this->app->scoped(BirGatewayInterface::class, CustomBirGateway::class);
+```
+
+Client replacement changes the complete public package behavior. Gateway
+replacement retains `BirClient` input, date, and report-compatibility checks
+plus DTO mapping, but bypasses native authentication, recovery, transport,
+decoding, and rate limiting. A custom gateway that calls GUS owns equivalent
+quota coordination and safe exceptions. Transport replacement retains the
+native gateway's login/session-recovery orchestration and inner report XML
+decoding, but owns authentication-configuration reporting, SOAP serialization,
+SID application, HTTP/proxy/TLS behavior, and rate limiting. Client, gateway,
+and transport bindings affect only the production graph; `BirRegon::sandbox()`
+deliberately keeps a separate native graph. Replace `BirRegonService` as a whole
+when both environments need custom behavior.
+
+The service provider constructs its native limiter directly. Binding
+`BirRequestLimiterInterface` in the container alone does not replace it; pass a
+custom limiter to a directly constructed `NativeSoapTransport` or replace the
+transport. Read
+`vendor/cieplik206/laravel-bir-regon/docs/extending.md` before implementing any
+of these contracts.
+
 ## Searches
 
 Choose the entry point that matches the identifier:
@@ -120,6 +180,9 @@ empty collection.
 `CompanyData::$type`, `$silo`, and `$nipStatus` use `EntityType`, `Silo`, and
 nullable `NipStatus` enums. `regon14` is nullable and must remain `null` unless
 GUS returned a 14-digit REGON. Never synthesize or pad it.
+
+The only non-empty `NipStatus` cases are `Revoked` (`Uchylony`) and
+`Invalidated` (`Unieważniony`); an empty or missing source value maps to `null`.
 
 Use the exact closed enum cases. `EntityType` contains `LegalUnit` (`P`),
 `NaturalPerson` (`F`), `LegalUnitLocalUnit` (`LP`), and
@@ -230,6 +293,16 @@ $report = BirRegon::forDate($date)
     ->get();
 ```
 
+The input instant is first converted to `Europe/Warsaw`; its resulting calendar
+day must be from yesterday through seven days ago. Today, future dates, and
+older dates throw `BirValidationException` before network access. The package
+normalizes the accepted value to Warsaw midnight. `getBulkReport()` is an alias
+for `get()`. `BulkReportData` contains that normalized `date`, the selected
+`reportType`, and `reportData` as a `list<string>` of REGON values. Read the
+report-types table in
+`vendor/cieplik206/laravel-bir-regon/docs/reports.md` instead of inventing enum
+cases.
+
 ## Production, sandbox, and diagnostics
 
 Production is the default. Select the dedicated sandbox service before creating
@@ -254,9 +327,10 @@ corporate proxy. It accepts only `http` or `https`, a host, and an optional
 port. Never embed userinfo in the URL; set `BIR_PROXY_USERNAME` and
 `BIR_PROXY_PASSWORD` together when authentication is required, and use
 `https://` because authenticated `http://` proxy configuration is rejected.
-Explicit proxy
-routing uses CONNECT, does not honor an ambient `NO_PROXY` bypass, verifies the
-GUS target and an HTTPS proxy, and cannot be combined with a custom HTTP sender.
+Proxy credentials cannot contain ASCII control characters or leading or
+trailing whitespace trimmed by PHP. Explicit proxy routing uses CONNECT, does
+not honor an ambient `NO_PROXY` bypass, verifies the GUS target and an HTTPS
+proxy, and cannot be combined with a custom HTTP sender.
 Anonymous `http://` proxies remain supported, but their client-to-proxy link is
 unencrypted even though target TLS inside CONNECT protects the SOAP exchange.
 With `BIR_PROXY_URL` empty, preserve libcurl's ambient `HTTPS_PROXY` and
@@ -264,8 +338,12 @@ With `BIR_PROXY_URL` empty, preserve libcurl's ambient `HTTPS_PROXY` and
 logs, exceptions, debug output, or serialized state.
 
 Laravel enables the cache-backed request limiter by default. On
-`BirRateLimitException`, back off for `retryAfterSeconds()`; do not immediately
-retry or bypass the limiter. Read
+`BirRateLimitException`, back off for `retryAfterSeconds()` and inspect
+`quotaWasExceeded()`. A `true` value means the package's local quota model
+blocked the call; it does not prove GUS's remote quota is exhausted. A `false`
+value means the limiter or its coordination is unavailable: keep retries
+bounded, alert operators, and diagnose a custom limiter or the shared store
+instead of creating an unbounded retry loop. Never bypass the limiter. Read
 `vendor/cieplik206/laravel-bir-regon/docs/rate-limits.md` for configuration and
 request weights.
 
@@ -297,9 +375,11 @@ second.
 Use the exact base `Illuminate\Cache\Repository` with only `ArrayStore`,
 `DatabaseStore`, `FileStore`, `MemcachedStore`, or `RedisStore`. Tagged caches,
 repository decorators/subclasses, DynamoDB, `FailoverStore`, `MemoizedStore`,
-`NullStore`, and custom stores must fail closed. `ArrayStore` and `FileStore` do
-not coordinate hosts; use one shared Redis store and prefix for a multi-host
-deployment. A custom backend requires a custom limiter.
+`NullStore`, and custom stores must fail closed. `ArrayStore` coordinates only
+one PHP process and belongs in deterministic tests. `FileStore` can coordinate
+processes sharing one host filesystem but not separate hosts. Use one shared
+Redis store and matching effective Redis, cache, and BIR prefixes for a
+multi-host deployment. A custom backend requires a custom limiter.
 
 Scoped custom limiters implement `BirRateLimitScopeInterface` with explicit
 `beginRateLimitScope(): void` and `endRateLimitScope(): void` methods. Do not
@@ -312,6 +392,11 @@ $status = BirRegon::service()->get();
 $dataStatus = BirRegon::service()->dataStatus();
 $diagnostics = BirRegon::diagnostics()->get();
 ```
+
+`ServiceStatusData` exposes integer `status`, string `message`, and
+`isAvailable()`. Data status is a `DateTimeImmutable`. `DiagnosticsData`
+exposes integer `messageCode`, string `message`, and integer `sessionStatus`.
+These strings are still untrusted registry/service input.
 
 Manual logout is optional. Use `BirRegon::logout()` for production or
 `$sandbox->logout()` for the isolated sandbox session when a workflow must end
@@ -399,13 +484,13 @@ try {
 } catch (BirNotFoundException $exception) {
     // No matching entity.
 } catch (BirAuthenticationException $exception) {
-    // Missing or rejected API key.
+    // Missing/rejected API key or failed session renewal.
 } catch (BirAmbiguousResultException $exception) {
     // A singular full-report call had several targets; use getFullReports().
 } catch (BirValidationException $exception) {
     // Invalid local input or an incompatible full-report type.
 } catch (BirRateLimitException $exception) {
-    // Back off for $exception->retryAfterSeconds().
+    // Back off for retryAfterSeconds(); alert if the limiter is unavailable.
 } catch (BirReportException $exception) {
     // GUS rejected a report; inspect $exception->gusCode.
 } catch (BirTransportException $exception) {
@@ -419,15 +504,17 @@ try {
 }
 ```
 
-All specialized exceptions extend `BirException`. The package omits the active
-API key, session ID, request XML, response body, and raw upstream exception from
-the returned exception graph. It also omits NIP, REGON, and KRS values from
-not-found and ambiguity messages and properties, and marks native argument
-carriers with `#[\SensitiveParameter]`. PHP does not inherit parameter
-attributes from interfaces, so custom client, gateway, transport, limiter, and
-test-fake implementations must repeat the attribute on their sensitive
-parameters. `BirAmbiguousResultException::$identifier` does not exist; keep an
-application correlation value separately if needed. Construct
+All specialized exceptions extend `BirException`. The native implementation
+omits the active API key, session ID, request XML, response body, and raw
+upstream exception from the returned exception graph. It also omits NIP, REGON,
+and KRS values from not-found and ambiguity messages and properties, and marks
+native argument carriers with `#[\SensitiveParameter]`. Custom components must
+construct equally safe exceptions without secret text or an unsafe previous
+exception. PHP does not inherit parameter attributes from interfaces, so custom
+client, gateway, transport, limiter, and test-fake implementations must repeat
+the attribute on their sensitive parameters.
+`BirAmbiguousResultException::$identifier` does not exist; keep an application
+correlation value separately if needed. Construct
 `BirNotFoundException` with only the identifier type, and construct
 `BirAmbiguousResultException` with the identifier type and compatible target
 count. Read `BirReportException::$gusCode` for a rejected report. Use
@@ -445,15 +532,18 @@ login SID is `BirProtocolException`, while an empty login result is an
 authentication rejection.
 
 Never catch every `BirException` only to release a queued job for one fixed
-delay. Release using `BirRateLimitException::retryAfterSeconds()` only for the
-rate-limit case; validation, not-found, authentication, protocol, report, and
-transport failures require their own policies.
+delay. Release using `BirRateLimitException::retryAfterSeconds()` for the
+rate-limit case. When `quotaWasExceeded()` is false, also bound the retry count,
+alert, and diagnose the limiter or its coordination. Validation, not-found,
+authentication, protocol, report, and transport failures require their own
+policies.
 
 ## Testing
 
 The package does not require a fresh Laravel application, PMS, or a database.
 Its own test suite uses Pest 5, `pest-plugin-phpstan`, and Orchestra Testbench
-11 on Laravel 13; the runtime floor is PHP 8.4:
+11 on Laravel 13. The runtime floor is PHP 8.4.0, while installing the complete
+Pest 5 development graph requires PHP 8.4.1 or newer:
 
 ```bash
 composer test

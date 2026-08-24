@@ -122,6 +122,11 @@ $report = BirRegon::forDate($date)
 
 `getBulkReport()` is an alias for `get()`.
 
+The input instant is converted to `Europe/Warsaw`, then normalized to midnight.
+Its resulting Warsaw calendar date must be from yesterday through seven days
+ago, inclusive. Today, future dates, and older dates throw
+`BirValidationException` before any gateway or network call.
+
 ### Available bulk report types
 
 | Enum case | Registry change |

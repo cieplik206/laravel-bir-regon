@@ -7,6 +7,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-08-24
+
+### Fixed
+
+- Complete the shipped Laravel Boost skill's version 2 guidance for migration,
+  required extensions, safe environment defaults, scoped customization,
+  bulk-report dates, typed service results, limiter failure handling, and the
+  Pest 5 development floor
+
 ## [2.0.0] - 2026-08-24
 
 ### Added
@@ -234,7 +243,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Isolated tests and opt-in live GUS sandbox tests
 - A discoverable Laravel Boost skill for AI-assisted integrations
 
-[Unreleased]: https://github.com/cieplik206/laravel-bir-regon/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/cieplik206/laravel-bir-regon/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/cieplik206/laravel-bir-regon/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.1.1...v2.0.0
 [1.1.1]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.0.2...v1.1.0

@@ -118,10 +118,14 @@ $this->app->scoped(
 ```
 
 The transport receives a `BirOperation` and its typed package parameters and
-must return a `TransportResponse`. It is also responsible for applying the
-current session set through `useSession()`. Implementations must not expose the
-API key, session identifier, request XML, or raw response content in exception
-messages, stack traces, debug output, or serialized state.
+must return a `TransportResponse`. It owns the selected environment's credential
+and must report whether that credential is configured through
+`isAuthenticationConfigured()`. A `call(BirOperation::Login)` arrives without
+the credential in its parameter array, so the transport must serialize its own
+safely stored key, apply the current session set through `useSession()`, and
+decode the SOAP boundary. Implementations must not expose the API key, session
+identifier, request XML, or raw response content in exception messages, stack
+traces, debug output, or serialized state.
 
 Native public and downstream methods mark NIP, REGON, KRS, `SearchCriteria`,
 and operation parameter arrays with `#[\SensitiveParameter]`. PHP does not
@@ -167,15 +171,17 @@ Custom gateways must implement both `diagnostics(): DiagnosticsSnapshot` and
 should make the no-session case idempotent and clear local session state even
 when the remote operation fails.
 
-Custom gateway and transport bindings affect the production client resolved
-from the container. `BirRegon::sandbox()` deliberately constructs an isolated
-native sandbox graph so production extensions cannot accidentally receive the
-sandbox credential or session. Replace `BirRegonService` as a whole if an
-application also needs custom sandbox behavior.
+Custom client, gateway, and transport bindings affect only the production graph
+resolved from the container. `BirRegon::sandbox()` deliberately constructs an
+isolated native sandbox graph so production extensions cannot accidentally
+receive the sandbox credential or session. Replace `BirRegonService` as a whole
+if an application also needs custom sandbox behavior.
 
 When constructing `BirRegonService` manually, pass distinct production and
-sandbox client instances. Supplying the same object for both environments is
-rejected, because it would route `sandbox()` calls through production state.
+sandbox client instances and do not share stateful credential, session,
+gateway, transport, or limiter objects between their graphs. Supplying the same
+client object for both environments is rejected, because it would route
+`sandbox()` calls through production state.
 
 `NativeSoapTransport` requires an explicit `BirRequestLimiterInterface` when it
 is instantiated directly. Laravel's service provider passes
@@ -247,12 +253,16 @@ DynamoDB, `FailoverStore`, `MemoizedStore`, `NullStore`, or a custom backend,
 write a `BirRequestLimiterInterface` implementation with coordination semantics
 appropriate to that backend and pass it to `NativeSoapTransport`.
 
-Each native transport also owns one persistent cURL handle. `curl_reset()`
-clears callbacks, request bodies, and SID headers between calls while keeping
-that handle's connection, DNS, and TLS session caches reusable. Handles are not
-global: separate transport instances, including the production and sandbox
-graphs, never share them. A custom transport should preserve the same credential
-and environment isolation even if it uses a different connection pool.
+With the built-in `CurlBirHttpSender`, each independently constructed native
+transport owns one persistent cURL handle. `curl_reset()` clears callbacks,
+request bodies, and SID headers between calls while keeping that handle's
+connection, DNS, and TLS session caches reusable. Production and sandbox graphs
+construct separate senders and never share their handles. Cloning a native
+transport intentionally shares its sender while cloning the SID-bearing
+envelope state; when the sender is native, the clone therefore shares its cURL
+handle and must not be used concurrently. A supplied custom sender owns its own
+pooling and sharing rules. A custom transport should preserve credential and
+environment isolation even if it uses a different connection pool.
 
 ## Facade and dependency injection
 
