@@ -69,6 +69,16 @@ BIR_SANDBOX_API_KEY=your-test-key
 The sandbox key is never used for production requests, and the production key
 is never sent to the sandbox endpoint.
 
+Identifier checksums are optional. To reject invalid NIP and REGON checksums
+locally for both environments, add:
+
+```dotenv
+BIR_IDENTIFIER_VALIDATION=checksum
+```
+
+The default `format` mode checks only the exact digit lengths required by GUS.
+KRS has no checksum and is format-only in either mode.
+
 ## Configure shared request limiting
 
 Request limiting is enabled automatically by the Laravel service provider.

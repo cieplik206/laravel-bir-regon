@@ -18,8 +18,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Add typed full-report normalization for common entity, address, contact,
   registry, legal-form, lifecycle, local-unit, PKD, partner, and unit-type
   fields while retaining every raw GUS row for forward compatibility
-- Add opt-in NIP and REGON checksum validation without making checksums a
-  prerequisite for the official wire protocol
+- Add opt-in NIP and REGON checksum validation to direct and Laravel-managed
+  clients, with one fail-closed `format`/`checksum` policy shared by production
+  and sandbox without making checksums a prerequisite for the wire protocol
 - Add a cache-backed, distributed Laravel request limiter enabled by default,
   official time-of-day quotas, weighted per-second GCRA, fixed calendar minute
   and hour windows, explicit recovery scopes, bounded pacing, a strict cache

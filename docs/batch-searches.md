@@ -79,23 +79,19 @@ more than 20 identifiers, or an identifier with an invalid length or non-digit
 character is rejected locally with `BirValidationException` before login or any
 network request.
 
-Length and digit validation follows the GUS request contract. Checksum
-validation is deliberately opt-in and can be applied to user input before
-building a request:
+Length and digit validation follows the GUS request contract. To reject an
+invalid checksum in every NIP and REGON batch before gateway access, opt in for
+both production and sandbox clients:
 
-```php
-use cieplik206\BirRegon\Validation\PolishIdentifierChecksum;
-
-PolishIdentifierChecksum::assertValidNip($nip);
-PolishIdentifierChecksum::assertValidRegon($regon); // REGON-9 or REGON-14
-
-$companies = BirRegon::forNip($nip)->get();
+```dotenv
+BIR_IDENTIFIER_VALIDATION=checksum
 ```
 
-The utility also provides `isValidNip()`, `isValidRegon()`,
-`isValidRegon9()`, `isValidRegon14()`, and their corresponding assertion
-methods. A REGON-14 assertion validates both its embedded REGON-9 checksum and
-its final checksum. KRS has no equivalent checksum method.
+The default remains `format` for compatibility with synthetic fixtures and the
+wire contract. In `checksum` mode REGON-14 validation checks both its embedded
+REGON-9 checksum and its final checksum. KRS has no checksum and remains a
+10-digit format check. Neither mode removes prefixes, spaces, or dashes, and a
+valid checksum does not prove registry existence.
 
 For larger input sets, split them into chunks before calling the API:
 

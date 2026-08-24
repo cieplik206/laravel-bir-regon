@@ -109,27 +109,32 @@ calls can reuse the HTTP connection and TLS session. Request-specific bodies
 and SID headers are reset after every call; production and sandbox never share
 a handle or authenticated session.
 
-## Optional checksum validation
+## Identifier validation policy
 
-Fluent searches always enforce the lengths and decimal formats required by the
-GUS protocol. When input also needs a Polish checksum check, use the stateless
-validator before making the request:
+Fluent searches always enforce the exact lengths and decimal formats required
+by the GUS protocol. Checksum validation is opt-in for applications that also
+want to reject NIP and REGON transcription errors locally:
 
-```php
-use cieplik206\BirRegon\Validation\PolishIdentifierChecksum;
-
-if (! PolishIdentifierChecksum::isValidNip($nip)) {
-    // Reject the form value without a GUS request.
-}
-
-PolishIdentifierChecksum::assertValidRegon9($regon9);
-PolishIdentifierChecksum::assertValidRegon14($regon14);
+```dotenv
+BIR_IDENTIFIER_VALIDATION=checksum
 ```
 
-The available predicates are `isValidNip()`, `isValidRegon()`,
-`isValidRegon9()`, and `isValidRegon14()`; matching `assertValid*()` methods
-throw `BirValidationException`. Checksum validation is not performed
-implicitly because the GUS operation itself specifies only shape constraints.
+The default `format` mode preserves protocol compatibility and accepts
+synthetic identifiers used in fixtures. `checksum` rejects a checksum-invalid
+NIP, REGON-9, or REGON-14 with `BirValidationException` before gateway access.
+It applies to single and batch searches and to the identifier search performed
+for full reports, in both production and sandbox.
+
+KRS has no checksum and is always validated only as a 10-digit string. A valid
+NIP or REGON checksum likewise does not prove that the identifier exists or
+that its entity is active. Keep every identifier as a string to preserve
+leading zeroes. The client deliberately rejects decorated input such as
+`PL7740001454`, `774-000-14-54`, or values containing spaces instead of
+normalizing it silently.
+
+The stateless `PolishIdentifierChecksum` predicates and `assertValid*()`
+methods remain available when a consuming application needs validation outside
+the configured client path.
 
 ## Request limits
 

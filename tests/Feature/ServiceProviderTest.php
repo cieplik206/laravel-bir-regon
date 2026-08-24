@@ -9,6 +9,9 @@ use cieplik206\BirRegon\BirRegonServiceProvider;
 use cieplik206\BirRegon\Contracts\BirGatewayInterface;
 use cieplik206\BirRegon\Contracts\BirSoapTransportInterface;
 use cieplik206\BirRegon\Enums\Environment;
+use cieplik206\BirRegon\Enums\IdentifierValidationMode;
+use cieplik206\BirRegon\Exceptions\BirValidationException;
+use cieplik206\BirRegon\Facades\BirRegon as BirRegonFacade;
 use cieplik206\BirRegon\Gateway\NativeBirGateway;
 use cieplik206\BirRegon\Protocol\SoapEnvelopeBuilder;
 use cieplik206\BirRegon\Protocol\SoapResponseDecoder;
@@ -28,6 +31,7 @@ it('merges the complete default package configuration', function (): void {
             'request_timeout' => 30,
             'max_response_bytes' => 10_000_000,
             'user_agent' => 'laravel-bir-regon/2',
+            'identifier_validation' => 'format',
             'rate_limit' => [
                 'enabled' => true,
                 'store' => null,
@@ -58,6 +62,8 @@ it('registers the native dependency graph as scoped services', function (): void
         ->and(providerTestProperty($transport, 'requestLimiter'))
         ->toBeInstanceOf(CacheBirRequestLimiter::class)
         ->and(providerTestProperty($client, 'gateway'))->toBe($gateway)
+        ->and(providerTestProperty($client, 'identifierValidationMode'))
+        ->toBe(IdentifierValidationMode::FormatOnly)
         ->and(providerTestProperty($service, 'client'))->toBe($client);
 
     $container->forgetScopedInstances();
@@ -88,6 +94,7 @@ it('builds isolated production and sandbox native transports from configuration'
     config()->set('bir-regon.request_timeout', 19);
     config()->set('bir-regon.max_response_bytes', 123_456);
     config()->set('bir-regon.user_agent', 'bir-regon-provider-test/1');
+    config()->set('bir-regon.identifier_validation', 'checksum');
 
     $productionTransport = app(BirSoapTransportInterface::class);
     $service = app(BirRegonService::class);
@@ -118,6 +125,10 @@ it('builds isolated production and sandbox native transports from configuration'
         ->and($sandboxClient)->not->toBe($productionClient)
         ->and($sandboxGateway)->not->toBe($productionGateway)
         ->and($sandboxTransport)->not->toBe($productionTransport)
+        ->and(providerTestProperty($productionClient, 'identifierValidationMode'))
+        ->toBe(IdentifierValidationMode::FormatAndChecksum)
+        ->and(providerTestProperty($sandboxClient, 'identifierValidationMode'))
+        ->toBe(IdentifierValidationMode::FormatAndChecksum)
         ->and(providerTestTransportConfiguration($productionTransport))->toBe([
             'apiKey' => $productionKey,
             'environment' => Environment::Production,
@@ -141,6 +152,32 @@ it('builds isolated production and sandbox native transports from configuration'
         ->and($productionTransport->isAuthenticationConfigured())->toBeTrue()
         ->and($sandboxTransport->isAuthenticationConfigured())->toBeTrue()
         ->and(providerTestProperty($service->sandbox(), 'client'))->toBe($sandboxClient);
+});
+
+it('fails closed for an invalid identifier validation configuration', function (
+    mixed $value,
+    string $message,
+): void {
+    config()->set('bir-regon.identifier_validation', $value);
+
+    expect(fn () => app(BirClientInterface::class))
+        ->toThrow(LogicException::class, $message);
+})->with([
+    'unknown string' => [
+        'strict',
+        'BIR identifier validation mode must be "format" or "checksum".',
+    ],
+    'boolean' => [true, 'BIR identifier validation mode must be a string.'],
+    'array' => [['checksum'], 'BIR identifier validation mode must be a string.'],
+]);
+
+it('applies checksum validation through the facade in both environments', function (): void {
+    config()->set('bir-regon.identifier_validation', 'checksum');
+
+    expect(fn () => BirRegonFacade::forNip('7740001455')->get())
+        ->toThrow(BirValidationException::class, 'NIP checksum is invalid.')
+        ->and(fn () => BirRegonFacade::sandbox()->forRegon('610188202')->get())
+        ->toThrow(BirValidationException::class, 'REGON checksum is invalid.');
 });
 
 it('applies the configured response limit to both SOAP and inner XML decoders', function (): void {

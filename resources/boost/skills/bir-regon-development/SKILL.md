@@ -27,6 +27,7 @@ BIR_SANDBOX_API_KEY=your-test-key
 BIR_CONNECTION_TIMEOUT=10
 BIR_REQUEST_TIMEOUT=30
 BIR_MAX_RESPONSE_BYTES=10000000
+BIR_IDENTIFIER_VALIDATION=format
 BIR_RATE_LIMIT_ENABLED=true
 BIR_RATE_LIMIT_STORE=redis
 BIR_RATE_LIMIT_PREFIX=bir-regon:rate-limit
@@ -126,11 +127,16 @@ Batch calls return `Illuminate\Support\Collection<int, CompanyData>`. GUS
 accepts at most 20 identifiers per request; chunk larger inputs into groups of
 20. An empty input returns an empty collection without a request.
 
-The fluent API validates identifier shape, not Polish checksums. When the
-application requires a checksum check, call the stateless
-`cieplik206\BirRegon\Validation\PolishIdentifierChecksum` predicates or
-`assertValid*()` methods before searching. Do not add implicit checksum
-rejection to package calls; it is stricter than the GUS request contract.
+The fluent API always validates identifier shape. It defaults to
+`BIR_IDENTIFIER_VALIDATION=format`; set the value to `checksum` when the
+application should also reject invalid NIP and REGON checksums before gateway
+access. The same setting controls production and sandbox, single and batch
+searches, and report lookups. KRS has no checksum and remains a strict 10-digit
+format check. Never treat checksum validity as proof that an identifier exists
+or that an entity is active. Preserve identifiers as undecorated strings; the
+package does not strip `PL`, spaces, or dashes. Use the stateless
+`PolishIdentifierChecksum` API only when validation is needed outside the
+configured client path.
 
 ## Full and bulk reports
 

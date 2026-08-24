@@ -64,6 +64,13 @@ Add your BIR API key to `.env`:
 BIR_API_KEY=your-api-key
 ```
 
+To reject NIP and REGON values with invalid Polish checksums before any GUS
+request, opt in explicitly:
+
+```dotenv
+BIR_IDENTIFIER_VALIDATION=checksum
+```
+
 The official public sandbox key is configured by default. Override it only
 when GUS provides a different test key:
 
@@ -135,14 +142,19 @@ returns a 14-digit REGON; the package never derives it by padding another
 identifier.
 
 Checksum validation is intentionally optional because it is stricter than the
-GUS request contract. Validate user input before searching when needed:
+GUS request contract. Laravel defaults to `BIR_IDENTIFIER_VALIDATION=format`,
+which checks exact digit lengths only. Set it to `checksum` to apply the
+existing NIP and REGON checksum algorithms automatically to production and
+sandbox searches, batches, and report lookups:
 
-```php
-use cieplik206\BirRegon\Validation\PolishIdentifierChecksum;
-
-PolishIdentifierChecksum::assertValidNip($nip);
-PolishIdentifierChecksum::assertValidRegon($regon);
+```dotenv
+BIR_IDENTIFIER_VALIDATION=checksum
 ```
+
+KRS has no checksum algorithm and remains a strict 10-digit format check in
+both modes. A valid checksum does not prove that an identifier exists or that
+an entity is active. The client accepts undecorated digit strings and does not
+remove `PL`, spaces, or dashes.
 
 Production is the default. Select the isolated GUS test client before building
 a sandbox request:

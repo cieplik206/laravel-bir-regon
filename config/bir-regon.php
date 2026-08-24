@@ -9,6 +9,7 @@ return [
     'request_timeout' => (int) env('BIR_REQUEST_TIMEOUT', 30),
     'max_response_bytes' => (int) env('BIR_MAX_RESPONSE_BYTES', 10_000_000),
     'user_agent' => env('BIR_USER_AGENT', 'laravel-bir-regon/2'),
+    'identifier_validation' => env('BIR_IDENTIFIER_VALIDATION', 'format'),
     'rate_limit' => [
         'enabled' => (bool) env('BIR_RATE_LIMIT_ENABLED', true),
         'store' => env('BIR_RATE_LIMIT_STORE'),

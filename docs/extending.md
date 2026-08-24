@@ -93,11 +93,13 @@ need it.
 `SearchResult` uses `EntityType`, `Silo`, and nullable `NipStatus` enums for
 closed protocol vocabularies. A custom gateway must construct those enums and
 must not pass arbitrary response strings through as public types. Applications
-that need stricter input policy may call `PolishIdentifierChecksum` before the
-fluent API, or use the optional checksum argument on the NIP and REGON
-`SearchCriteria` factories when constructing protocol criteria directly.
-Format-only validation remains the default because that is the GUS request
-contract.
+that need stricter input policy may configure
+`BIR_IDENTIFIER_VALIDATION=checksum`, call `PolishIdentifierChecksum`
+directly, or use the optional checksum argument on the NIP and REGON
+`SearchCriteria` factories. Direct `BirClient` construction accepts
+`IdentifierValidationMode` as its second constructor argument. Format-only
+validation remains the default because that is the GUS request contract. KRS
+has no checksum rule.
 
 ## Replacing only the SOAP transport
 

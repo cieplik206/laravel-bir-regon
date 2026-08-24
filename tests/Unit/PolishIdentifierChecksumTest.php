@@ -61,6 +61,12 @@ it('rejects unsupported REGON lengths through the general entry point', function
     expect(PolishIdentifierChecksum::isValidRegon('61018820'))->toBeFalse();
 });
 
+it('treats all-zero values as checksum-valid without claiming they exist', function (): void {
+    expect(PolishIdentifierChecksum::isValidNip('0000000000'))->toBeTrue()
+        ->and(PolishIdentifierChecksum::isValidRegon9('000000000'))->toBeTrue()
+        ->and(PolishIdentifierChecksum::isValidRegon14('00000000000000'))->toBeTrue();
+});
+
 it('offers throwing assertions for consumer validation', function (): void {
     PolishIdentifierChecksum::assertValidNip('7740001454');
     PolishIdentifierChecksum::assertValidRegon('610188201');

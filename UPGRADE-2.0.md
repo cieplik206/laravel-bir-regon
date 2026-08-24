@@ -323,8 +323,14 @@ Identifiers and batch sizes are validated before authentication or network
 access. NIP and KRS require exactly 10 digits, REGON requires 9 or 14 digits,
 and a batch contains at most 20 string identifiers. The default search path
 checks the official wire format only. Applications that require checksum
-policy can opt in through `PolishIdentifierChecksum` or the low-level criteria
-factory without rejecting synthetic sandbox and fixture identifiers globally:
+policy can set `BIR_IDENTIFIER_VALIDATION=checksum` for the production and
+sandbox fluent clients without rejecting synthetic sandbox and fixture
+identifiers by default. The stateless validator and low-level criteria factory
+remain available for narrower policies:
+
+```dotenv
+BIR_IDENTIFIER_VALIDATION=checksum
+```
 
 ```php
 use cieplik206\BirRegon\Protocol\SearchCriteria;

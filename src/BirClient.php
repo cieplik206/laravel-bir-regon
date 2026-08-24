@@ -12,6 +12,7 @@ use cieplik206\BirRegon\Data\DiagnosticsData;
 use cieplik206\BirRegon\Data\FullCompanyReportData;
 use cieplik206\BirRegon\Data\ServiceStatusData;
 use cieplik206\BirRegon\Enums\BulkReportType;
+use cieplik206\BirRegon\Enums\IdentifierValidationMode;
 use cieplik206\BirRegon\Enums\ReportType;
 use cieplik206\BirRegon\Exceptions\BirAmbiguousResultException;
 use cieplik206\BirRegon\Exceptions\BirException;
@@ -34,6 +35,7 @@ class BirClient implements BirClientInterface
 
     public function __construct(
         #[\SensitiveParameter] BirGatewayInterface $gateway,
+        private readonly IdentifierValidationMode $identifierValidationMode = IdentifierValidationMode::FormatOnly,
     ) {
         $this->gateway = new SensitiveParameterValue($gateway);
     }
@@ -43,7 +45,11 @@ class BirClient implements BirClientInterface
     {
         $this->ensureNotRestoredFromSerialization();
 
-        return $this->searchMany(SearchCriteria::nip($nip), [$nip], 'NIP');
+        return $this->searchMany(
+            SearchCriteria::nip($nip, validateChecksum: $this->validatesChecksums()),
+            [$nip],
+            'NIP',
+        );
     }
 
     /** @return list<CompanyData> */
@@ -51,7 +57,11 @@ class BirClient implements BirClientInterface
     {
         $this->ensureNotRestoredFromSerialization();
 
-        return $this->searchMany(SearchCriteria::regon($regon), [$regon], 'REGON');
+        return $this->searchMany(
+            SearchCriteria::regon($regon, validateChecksum: $this->validatesChecksums()),
+            [$regon],
+            'REGON',
+        );
     }
 
     /** @return list<CompanyData> */
@@ -68,7 +78,14 @@ class BirClient implements BirClientInterface
 
         return $nips === []
             ? []
-            : $this->searchMany(SearchCriteria::nips(array_values($nips)), $nips, 'NIP');
+            : $this->searchMany(
+                SearchCriteria::nips(
+                    array_values($nips),
+                    validateChecksum: $this->validatesChecksums(),
+                ),
+                $nips,
+                'NIP',
+            );
     }
 
     public function searchByKrsNumbers(array $krsNumbers): array
@@ -90,7 +107,14 @@ class BirClient implements BirClientInterface
 
         return $regons === []
             ? []
-            : $this->searchMany(SearchCriteria::regons9(array_values($regons)), $regons, 'REGON9');
+            : $this->searchMany(
+                SearchCriteria::regons9(
+                    array_values($regons),
+                    validateChecksum: $this->validatesChecksums(),
+                ),
+                $regons,
+                'REGON9',
+            );
     }
 
     public function searchByRegons14(array $regons): array
@@ -100,7 +124,10 @@ class BirClient implements BirClientInterface
         return $regons === []
             ? []
             : $this->searchMany(
-                SearchCriteria::regons14(array_values($regons)),
+                SearchCriteria::regons14(
+                    array_values($regons),
+                    validateChecksum: $this->validatesChecksums(),
+                ),
                 $regons,
                 'REGON14',
             );
@@ -110,7 +137,12 @@ class BirClient implements BirClientInterface
     {
         $this->ensureNotRestoredFromSerialization();
 
-        return $this->getFullReportFromSearch(SearchCriteria::nip($nip), $nip, 'NIP', $reportType);
+        return $this->getFullReportFromSearch(
+            SearchCriteria::nip($nip, validateChecksum: $this->validatesChecksums()),
+            $nip,
+            'NIP',
+            $reportType,
+        );
     }
 
     /** @return list<FullCompanyReportData> */
@@ -118,7 +150,12 @@ class BirClient implements BirClientInterface
     {
         $this->ensureNotRestoredFromSerialization();
 
-        return $this->getFullReportsFromSearch(SearchCriteria::nip($nip), $nip, 'NIP', $reportType);
+        return $this->getFullReportsFromSearch(
+            SearchCriteria::nip($nip, validateChecksum: $this->validatesChecksums()),
+            $nip,
+            'NIP',
+            $reportType,
+        );
     }
 
     public function getFullReportByKrs(string $krs, ReportType $reportType): FullCompanyReportData
@@ -141,7 +178,7 @@ class BirClient implements BirClientInterface
         $this->ensureNotRestoredFromSerialization();
 
         return $this->getFullReportFromSearch(
-            SearchCriteria::regon($regon),
+            SearchCriteria::regon($regon, validateChecksum: $this->validatesChecksums()),
             $regon,
             'REGON',
             $reportType,
@@ -154,7 +191,7 @@ class BirClient implements BirClientInterface
         $this->ensureNotRestoredFromSerialization();
 
         return $this->getFullReportsFromSearch(
-            SearchCriteria::regon($regon),
+            SearchCriteria::regon($regon, validateChecksum: $this->validatesChecksums()),
             $regon,
             'REGON',
             $reportType,
@@ -261,6 +298,11 @@ class BirClient implements BirClientInterface
         } catch (Throwable) {
             throw new BirException('GUS BIR logout operation failed.');
         }
+    }
+
+    private function validatesChecksums(): bool
+    {
+        return $this->identifierValidationMode->validatesChecksum();
     }
 
     /**

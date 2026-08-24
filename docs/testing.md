@@ -241,8 +241,11 @@ and nullable `NipStatus` enums. Its `fullReport()` result is always a list of
 raw string-keyed rows, including when a fixture contains only one row;
 `BirClient` maps that list to the normalized full-report DTO. Use
 `PolishIdentifierChecksum` directly in validation tests when checksum policy is
-part of the consuming application. The fluent API itself intentionally performs
-only the GUS-required length and digit checks.
+part of the consuming application, or set
+`bir-regon.identifier_validation` to `checksum` before resolving the scoped
+client to exercise the fluent path. The default `format` mode intentionally
+performs only the GUS-required length and digit checks. Tests using synthetic
+identifiers should normally keep that default.
 
 Normalization fixtures should model `NaturalPersonActivityKindsData` counts as
 nullable integers, including zero. Preserve empty and unknown-only rows in the

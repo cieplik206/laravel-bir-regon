@@ -18,6 +18,7 @@ BIR_CONNECTION_TIMEOUT=10
 BIR_REQUEST_TIMEOUT=30
 BIR_MAX_RESPONSE_BYTES=10000000
 BIR_USER_AGENT=laravel-bir-regon/2
+BIR_IDENTIFIER_VALIDATION=format
 BIR_RATE_LIMIT_ENABLED=true
 BIR_RATE_LIMIT_STORE=redis
 BIR_RATE_LIMIT_PREFIX=bir-regon:rate-limit
@@ -31,6 +32,7 @@ BIR_RATE_LIMIT_PREFIX=bir-regon:rate-limit
 | `BIR_REQUEST_TIMEOUT` | Positive integer, in seconds | `30` | Limits a complete SOAP request |
 | `BIR_MAX_RESPONSE_BYTES` | Positive integer, in bytes | `10000000` | Bounds streamed HTTP bodies, SOAP/MIME payloads, and nested report XML |
 | `BIR_USER_AGENT` | 1-200 printable ASCII characters | `laravel-bir-regon/2` | Identifies the package transport to GUS |
+| `BIR_IDENTIFIER_VALIDATION` | `format` or `checksum` | `format` | Selects local NIP and REGON validation before gateway access |
 | `BIR_RATE_LIMIT_ENABLED` | Laravel boolean | `true` | Enables shared cache-backed request limiting |
 | `BIR_RATE_LIMIT_STORE` | A configured Laravel cache store name | Default cache store | Selects the limiter state and lock backend |
 | `BIR_RATE_LIMIT_PREFIX` | 1-100 ASCII letters, digits, `:`, `_`, or `-` | `bir-regon:rate-limit` | Namespaces limiter cache entries |
@@ -57,6 +59,7 @@ return [
     'request_timeout' => (int) env('BIR_REQUEST_TIMEOUT', 30),
     'max_response_bytes' => (int) env('BIR_MAX_RESPONSE_BYTES', 10_000_000),
     'user_agent' => env('BIR_USER_AGENT', 'laravel-bir-regon/2'),
+    'identifier_validation' => env('BIR_IDENTIFIER_VALIDATION', 'format'),
     'rate_limit' => [
         'enabled' => (bool) env('BIR_RATE_LIMIT_ENABLED', true),
         'store' => env('BIR_RATE_LIMIT_STORE'),
@@ -73,6 +76,27 @@ exchange, not only socket inactivity. Keep the response limit large enough for
 the full or bulk reports used by the application, but avoid disabling it with
 an unbounded value. The same byte limit applies while streaming the outer HTTP
 body and again when decoding the nested report XML.
+
+## Identifier validation
+
+`format` is the backward-compatible default. It requires exactly 10 digits for
+NIP and KRS, and exactly 9 or 14 digits for REGON. `checksum` keeps those shape
+checks and additionally validates the Polish NIP and REGON checksums before
+login, rate-limit reservation, or any network request. The selected policy is
+applied equally to production and sandbox clients, including single searches,
+batches, and the search phase of full reports.
+
+KRS has no checksum algorithm, so it remains a 10-digit format check in both
+modes. Checksum validity is not evidence that a number exists, was assigned, or
+belongs to an active entity; even an all-zero value can satisfy the checksum
+mathematically. GUS or the relevant registry remains the source of those
+facts.
+
+The client accepts identifiers as undecorated digit strings and preserves
+leading zeroes. It does not strip a `PL` prefix, whitespace, or dashes. Perform
+UI-specific normalization before calling the package. Any configuration value
+other than the exact strings `format` or `checksum`, including a non-string
+value, fails closed with `LogicException` when the client is resolved.
 
 ## Request limiting
 

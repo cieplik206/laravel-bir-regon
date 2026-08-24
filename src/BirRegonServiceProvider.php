@@ -8,6 +8,7 @@ use cieplik206\BirRegon\Contracts\BirGatewayInterface;
 use cieplik206\BirRegon\Contracts\BirRequestLimiterInterface;
 use cieplik206\BirRegon\Contracts\BirSoapTransportInterface;
 use cieplik206\BirRegon\Enums\Environment;
+use cieplik206\BirRegon\Enums\IdentifierValidationMode;
 use cieplik206\BirRegon\Gateway\NativeBirGateway;
 use cieplik206\BirRegon\Protocol\XmlRecordsDecoder;
 use cieplik206\BirRegon\RateLimit\CacheBirRequestLimiter;
@@ -16,6 +17,7 @@ use cieplik206\BirRegon\Transport\NativeSoapTransport;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
+use LogicException;
 
 class BirRegonServiceProvider extends ServiceProvider
 {
@@ -53,6 +55,7 @@ class BirRegonServiceProvider extends ServiceProvider
                 #[\SensitiveParameter] array $parameters = [],
             ): BirClient => new BirClient(
                 $app->make(BirGatewayInterface::class),
+                self::identifierValidationMode(),
             ),
         );
         $this->app->scoped(
@@ -66,6 +69,7 @@ class BirRegonServiceProvider extends ServiceProvider
                         self::makeTransport($app, Environment::Sandbox),
                         new XmlRecordsDecoder(self::maxResponseBytes()),
                     ),
+                    self::identifierValidationMode(),
                 );
 
                 return new BirRegonService(
@@ -118,6 +122,20 @@ class BirRegonServiceProvider extends ServiceProvider
     private static function maxResponseBytes(): int
     {
         return max(1, (int) config('bir-regon.max_response_bytes', 10_000_000));
+    }
+
+    private static function identifierValidationMode(): IdentifierValidationMode
+    {
+        $value = config('bir-regon.identifier_validation', IdentifierValidationMode::FormatOnly->value);
+
+        if (! is_string($value)) {
+            throw new LogicException('BIR identifier validation mode must be a string.');
+        }
+
+        return IdentifierValidationMode::tryFrom($value)
+            ?? throw new LogicException(
+                'BIR identifier validation mode must be "format" or "checksum".',
+            );
     }
 
     public function boot(): void
