@@ -155,6 +155,27 @@ it('keeps fake-gateway clients serializable only as unusable tombstones', functi
         ->toBe(sprintf('Serialization of %s is not supported.', BirClient::class));
 });
 
+it('keeps a restored singular search builder inert for get and sole', function (): void {
+    $builder = (new BirRegonService(new BirClient(new FakeBirGateway)))
+        ->forNip('1234567890');
+    $restored = unserialize(serialize($builder));
+
+    expect($restored)->toBeInstanceOf(BirSearchBuilder::class);
+
+    foreach (['get', 'sole'] as $method) {
+        try {
+            $restored->{$method}();
+            throw new LogicException("Expected the restored builder to reject {$method}().");
+        } catch (LogicException $exception) {
+            expect($exception->getMessage())
+                ->toBe(sprintf(
+                    'Serialization of %s is not supported.',
+                    BirSearchBuilder::class,
+                ));
+        }
+    }
+});
+
 it('does not retain a BIR API key when deserializing a legacy client payload', function (): void {
     $apiKey = 'bir-legacy-serialization-security-test-sentinel';
     $serialized = legacySerializedBirClient($apiKey);

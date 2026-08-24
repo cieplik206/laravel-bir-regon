@@ -22,8 +22,8 @@ foreach ($companies as $company) {
 
 ## Features
 
-- Fluent searches by NIP, REGON, and KRS without discarding additional GUS
-  silo results
+- Fluent plural and exact-one searches by NIP, REGON, and KRS without silently
+  discarding additional GUS silo results
 - Batch searches for up to 20 identifiers
 - Native bounded cURL transport with SOAP 1.2, WS-Addressing, TLS 1.2 or newer,
   and strict timeout and response-size limits for the official GUS BIR 1.2 API
@@ -132,12 +132,17 @@ use cieplik206\BirRegon\Facades\BirRegon;
 $byNip = BirRegon::forNip('1234567890')->get();   // Collection<CompanyData>
 $byRegon = BirRegon::forRegon('123456789')->get();
 $byKrs = BirRegon::forKrs('0000123456')->get();
+
+$company = BirRegon::forNip('1234567890')->sole(); // CompanyData
 ```
 
 Even a single NIP, REGON, or KRS can identify more than one GUS record, for
 example activity recorded in separate silos. `get()` and `search()` therefore
-return every result as an `Illuminate\Support\Collection`. Use `sole()` only
-when the application's domain requires exactly one result.
+remain the safe plural default and return every result as an
+`Illuminate\Support\Collection`; neither method silently selects a silo.
+Builder `sole()` returns one `CompanyData`, throws `BirNotFoundException` for
+no rows, and throws `BirAmbiguousSearchResultException` for multiple rows. Use
+it only when the application's domain requires exactly one result.
 
 The same API is available through dependency injection:
 
@@ -163,7 +168,9 @@ class FindCompany
 Search response fields with a closed GUS vocabulary use `EntityType`, `Silo`,
 and nullable `NipStatus` enums. `regon14` remains `null` unless GUS actually
 returns a 14-digit REGON; the package never derives it by padding another
-identifier.
+identifier. `EntityType::isNaturalPersonFamily()` includes natural persons and
+their local units; `isLegalUnitFamily()` includes legal units and their local
+units.
 
 Checksum validation is intentionally optional because it is stricter than the
 GUS request contract. Laravel defaults to `BIR_IDENTIFIER_VALIDATION=format`,

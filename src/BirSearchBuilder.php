@@ -7,7 +7,9 @@ namespace cieplik206\BirRegon;
 use cieplik206\BirRegon\Data\CompanyData;
 use cieplik206\BirRegon\Data\FullCompanyReportData;
 use cieplik206\BirRegon\Enums\ReportType;
+use cieplik206\BirRegon\Exceptions\BirAmbiguousSearchResultException;
 use cieplik206\BirRegon\Exceptions\BirException;
+use cieplik206\BirRegon\Exceptions\BirNotFoundException;
 use Illuminate\Support\Collection;
 use SensitiveParameterValue;
 
@@ -45,13 +47,33 @@ class BirSearchBuilder extends BirRequestBuilder
     /** @return Collection<int, CompanyData> */
     public function search(): Collection
     {
-        return $this->searchWithClient();
+        return new Collection($this->searchWithClient());
     }
 
     /** @return Collection<int, CompanyData> */
     public function get(): Collection
     {
         return $this->search();
+    }
+
+    /**
+     * @throws BirAmbiguousSearchResultException
+     * @throws BirNotFoundException
+     */
+    public function sole(): CompanyData
+    {
+        $companies = $this->searchWithClient();
+        $resultCount = count($companies);
+
+        if ($resultCount === 0) {
+            throw new BirNotFoundException($this->identifierType);
+        }
+
+        if ($resultCount > 1) {
+            throw new BirAmbiguousSearchResultException($this->identifierType, $resultCount);
+        }
+
+        return $companies[0];
     }
 
     public function getFullReport(): FullCompanyReportData
@@ -89,8 +111,8 @@ class BirSearchBuilder extends BirRequestBuilder
         return new Collection($reports);
     }
 
-    /** @return Collection<int, CompanyData> */
-    private function searchWithClient(): Collection
+    /** @return list<CompanyData> */
+    private function searchWithClient(): array
     {
         $client = $this->getClient();
 
@@ -101,7 +123,7 @@ class BirSearchBuilder extends BirRequestBuilder
             default => throw new BirException('Unsupported search identifier type.'),
         };
 
-        return new Collection($companies);
+        return $companies;
     }
 
     /** @return array<string, string> */

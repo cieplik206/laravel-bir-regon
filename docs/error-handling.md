@@ -10,6 +10,7 @@ report failures into a package exception hierarchy.
 | Exception | When it is thrown |
 | --- | --- |
 | `BirNotFoundException` | GUS returns no entity for a search identifier |
+| `BirAmbiguousSearchResultException` | `BirSearchBuilder::sole()` receives more than one search row; use `get()` or `search()` to preserve them |
 | `BirAmbiguousResultException` | A singular full-report call matches more than one distinct compatible report REGON; use `getFullReports()` |
 | `BirAuthenticationException` | The API key is missing or rejected, or an expired session cannot be renewed |
 | `BirRateLimitException` | The local request quota is exhausted or its cache-backed coordination is unavailable |
@@ -32,15 +33,20 @@ that names both possibilities.
 
 ```php
 use cieplik206\BirRegon\Exceptions\BirAuthenticationException;
+use cieplik206\BirRegon\Exceptions\BirAmbiguousSearchResultException;
 use cieplik206\BirRegon\Exceptions\BirException;
 use cieplik206\BirRegon\Exceptions\BirNotFoundException;
 use cieplik206\BirRegon\Exceptions\BirRateLimitException;
 use cieplik206\BirRegon\Facades\BirRegon;
 
 try {
-    $companies = BirRegon::forNip($nip)->get();
+    $company = BirRegon::forNip($nip)->sole();
 } catch (BirNotFoundException $exception) {
     return null;
+} catch (BirAmbiguousSearchResultException $exception) {
+    report($exception);
+
+    throw $exception;
 } catch (BirRateLimitException $exception) {
     report($exception);
 
@@ -57,7 +63,12 @@ try {
 ```
 
 Catch the specialized exceptions before `BirException` because they inherit
-from it.
+from it. `BirAmbiguousSearchResultException` is specific to exact-one search
+selection. It does not replace `BirAmbiguousResultException`, which continues
+to report multiple compatible targets for singular `getFullReport()` calls.
+The former exposes the complete search-row count as `resultCount`; the latter
+exposes the count of distinct compatible report targets as
+`compatibleTargetCount`.
 
 ## Catching every package error
 
@@ -95,10 +106,10 @@ NIP, REGON, and KRS values are also omitted from package-generated not-found
 and ambiguity messages and from their public properties. Native entry points
 and downstream carriers use `#[\SensitiveParameter]`, so PHP replaces those
 arguments with `SensitiveParameterValue` in stack traces. Do not parse an
-identifier from `BirNotFoundException` or
-`BirAmbiguousResultException::$identifier`: that property no longer exists.
-Keep the operation input separately when application policy requires a
-correlation value.
+identifier value from `BirNotFoundException` or either ambiguity exception.
+Neither ambiguity exception has an `identifier` property; `identifierType`
+contains only the sanitized identifier kind. Keep the operation input
+separately when application policy requires a correlation value.
 
 Fluent search builders and native `SearchCriteria` objects also redact their
 identifier state from native dumps, `var_export`, Symfony VarDumper, and

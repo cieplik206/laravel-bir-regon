@@ -36,15 +36,20 @@ foreach ($companies as $company) {
     $company->regon;
     $company->silo; // Silo enum
 }
-
-$exactlyOne = $companies->sole();
 ```
 
-Call `sole()` only when zero or multiple rows should be treated as an
-application error. Do not use `first()` merely to recreate the old singular
-behavior; that can silently discard a valid silo result.
-When GUS returns no rows, the builder throws `BirNotFoundException` instead of
-returning an empty collection.
+`get()` and `search()` remain the safe default because neither silently chooses
+one silo. When the application requires exactly one row, call `sole()` on the
+search builder instead:
+
+```php
+$company = BirRegon::forNip('1234567890')->sole();
+```
+
+Builder `sole()` returns one `CompanyData`. It throws `BirNotFoundException`
+when GUS returns no rows and `BirAmbiguousSearchResultException` when GUS
+returns more than one row. Do not use `first()` to avoid the ambiguity error;
+that can silently discard a valid silo result.
 
 ## Dependency injection
 
