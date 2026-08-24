@@ -5,6 +5,7 @@ declare(strict_types=1);
 use cieplik206\BirRegon\BirClient;
 use cieplik206\BirRegon\BirClientInterface;
 use cieplik206\BirRegon\BirRegonService;
+use cieplik206\BirRegon\BirSearchBuilder;
 use cieplik206\BirRegon\Contracts\BirGatewayInterface;
 use cieplik206\BirRegon\Contracts\BirRequestLimiterInterface;
 use cieplik206\BirRegon\Contracts\BirSoapTransportInterface;
@@ -13,6 +14,7 @@ use cieplik206\BirRegon\Enums\Environment;
 use cieplik206\BirRegon\Enums\ReportType;
 use cieplik206\BirRegon\Enums\Silo;
 use cieplik206\BirRegon\Exceptions\BirAmbiguousResultException;
+use cieplik206\BirRegon\Exceptions\BirAmbiguousSearchResultException;
 use cieplik206\BirRegon\Exceptions\BirNotFoundException;
 use cieplik206\BirRegon\Exceptions\BirRateLimitException;
 use cieplik206\BirRegon\Exceptions\BirTransportException;
@@ -32,6 +34,8 @@ use cieplik206\BirRegon\Tests\Support\StubBirClient;
 use cieplik206\BirRegon\Transport\BirHttpSenderInterface;
 use cieplik206\BirRegon\Transport\NativeSoapTransport;
 use cieplik206\BirRegon\Validation\PolishIdentifierChecksum;
+use Symfony\Component\VarDumper\Cloner\VarCloner;
+use Symfony\Component\VarDumper\Dumper\CliDumper;
 
 $originalIdentifierPrivacyExceptionIgnoreArgs = ini_get('zend.exception_ignore_args');
 
@@ -128,6 +132,122 @@ it('does not expose the submitted identifier through an ambiguous result excepti
             ->and($exception->identifierType)->toBe('NIP')
             ->and($exception->compatibleTargetCount)->toBe(2)
             ->and(identifierPrivacyThrowableContains($exception, $identifier))->toBeFalse();
+    }
+});
+
+it('does not expose singular search identifiers through ambiguous search exceptions', function (): void {
+    $cases = [
+        ['1234567890', BirSearchBuilder::TYPE_NIP],
+        ['123456789', BirSearchBuilder::TYPE_REGON],
+        ['0987654321', BirSearchBuilder::TYPE_KRS],
+    ];
+
+    foreach ($cases as [$identifier, $identifierType]) {
+        $firstResult = identifierPrivacySearchResult(
+            $identifierType === BirSearchBuilder::TYPE_REGON ? $identifier : '111222333',
+            Silo::Ceidg,
+            $identifierType === BirSearchBuilder::TYPE_NIP ? $identifier : null,
+        );
+        $secondResult = identifierPrivacySearchResult(
+            '444555666',
+            Silo::Agriculture,
+            name: $identifierType === BirSearchBuilder::TYPE_KRS
+                ? $identifier
+                : 'Identifier privacy fixture',
+        );
+        $service = new BirRegonService(new BirClient(new FakeBirGateway(
+            searchResults: [$firstResult, $secondResult],
+        )));
+        $builder = match ($identifierType) {
+            BirSearchBuilder::TYPE_NIP => $service->forNip($identifier),
+            BirSearchBuilder::TYPE_REGON => $service->forRegon($identifier),
+            BirSearchBuilder::TYPE_KRS => $service->forKrs($identifier),
+        };
+        try {
+            $builder->sole();
+            throw new LogicException('The ambiguous singular search did not throw an exception.');
+        } catch (BirAmbiguousSearchResultException $exception) {
+            expect($exception->getMessage())
+                ->toBe(sprintf(
+                    'GUS BIR returned 2 search results for the %s identifier. Use get() or search() to retrieve every result.',
+                    $identifierType,
+                ))
+                ->and($exception->identifierType)->toBe($identifierType)
+                ->and($exception->resultCount)->toBe(2)
+                ->and($exception->getPrevious())->toBeNull()
+                ->and($exception->getTrace())->not->toBeEmpty()
+                ->and(identifierPrivacyThrowableContains($exception, $identifier))->toBeFalse();
+
+            $serialized = serialize($exception);
+            $restored = unserialize($serialized);
+
+            expect($restored)->toBeInstanceOf(BirAmbiguousSearchResultException::class)
+                ->and($restored->getMessage())->toBe($exception->getMessage())
+                ->and($restored->identifierType)->toBe($identifierType)
+                ->and($restored->resultCount)->toBe(2)
+                ->and($restored->getPrevious())->toBeNull()
+                ->and($restored->getTrace())->toBe([])
+                ->and(identifierPrivacyThrowableContains($restored, $identifier))->toBeFalse();
+
+            $renderedViews = identifierPrivacyThrowableViews($restored);
+            $renderedViews['serialized'] = $serialized;
+
+            foreach ($renderedViews as $view => $rendered) {
+                expect(str_contains($rendered, $identifier))
+                    ->toBeFalse("The {$view} view contains the search identifier.");
+            }
+        }
+    }
+});
+
+it('drops crafted state and the synthetic trace while restoring an ambiguous search exception', function (): void {
+    $identifier = '1234567890';
+    $previousSentinel = 'PREVIOUS-THROWABLE-SENTINEL';
+    $companySentinel = 'COMPANY-DATA-SENTINEL';
+    $class = BirAmbiguousSearchResultException::class;
+    $state = [
+        'identifierType' => BirSearchBuilder::TYPE_NIP,
+        'resultCount' => 2,
+        'identifier' => $identifier,
+        'previous' => $previousSentinel,
+        'company' => $companySentinel,
+    ];
+    $serializedState = serialize($state);
+    $stateEntries = strstr($serializedState, '{');
+
+    if (! is_string($stateEntries)) {
+        throw new LogicException('Unable to build the crafted exception payload.');
+    }
+
+    $craftedPayload = sprintf(
+        'O:%d:"%s":%d:%s',
+        strlen($class),
+        $class,
+        count($state),
+        $stateEntries,
+    );
+    $restored = unserialize($craftedPayload);
+
+    expect($restored)->toBeInstanceOf(BirAmbiguousSearchResultException::class)
+        ->and($restored->identifierType)->toBe(BirSearchBuilder::TYPE_NIP)
+        ->and($restored->resultCount)->toBe(2)
+        ->and($restored->getPrevious())->toBeNull()
+        ->and($restored->getTrace())->toBe([])
+        ->and(get_object_vars($restored))->not->toHaveKeys([
+            'identifier',
+            'previous',
+            'company',
+        ]);
+
+    $renderedViews = identifierPrivacyThrowableViews($restored);
+    $renderedViews['object state'] = print_r((array) $restored, true);
+    $renderedViews['reserialized'] = serialize($restored);
+
+    foreach ([$identifier, $previousSentinel, $companySentinel] as $sensitiveValue) {
+        foreach ($renderedViews as $view => $rendered) {
+            expect(str_contains($rendered, $sensitiveValue))
+                ->toBeFalse("The {$view} view contains crafted exception state.");
+        }
     }
 });
 
@@ -326,12 +446,16 @@ it('marks every public identifier entry point as sensitive', function (): void {
     }
 });
 
-function identifierPrivacySearchResult(string $regon, Silo $silo): SearchResult
-{
+function identifierPrivacySearchResult(
+    string $regon,
+    Silo $silo,
+    ?string $nip = null,
+    string $name = 'Identifier privacy fixture',
+): SearchResult {
     return new SearchResult(
         regon: $regon,
-        nip: null,
-        name: 'Identifier privacy fixture',
+        nip: $nip,
+        name: $name,
         city: null,
         postalCode: null,
         street: null,
@@ -347,6 +471,32 @@ function identifierPrivacySearchResult(string $regon, Silo $silo): SearchResult
         activityEndDate: null,
         postCity: null,
     );
+}
+
+/** @return array<string, string> */
+function identifierPrivacyThrowableViews(Throwable $exception): array
+{
+    $exported = var_export($exception, true);
+    ob_start();
+    var_dump($exception);
+    $nativeDump = ob_get_clean();
+    $symfonyDump = '';
+    (new CliDumper)->dump(
+        (new VarCloner)->cloneVar($exception),
+        static function (string $line) use (&$symfonyDump): void {
+            $symfonyDump .= $line;
+        },
+    );
+
+    return [
+        'message' => $exception->getMessage(),
+        'string' => (string) $exception,
+        'trace' => $exception->getTraceAsString(),
+        'print_r' => print_r($exception, true),
+        'var_dump' => is_string($nativeDump) ? $nativeDump : '',
+        'var_export' => $exported,
+        'Symfony VarDumper' => $symfonyDump,
+    ];
 }
 
 function identifierPrivacyThrowableContains(Throwable $exception, string $identifier): bool

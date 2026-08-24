@@ -7,7 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-## [2.0.1] - 2026-08-24
+## [2.1.0] - 2026-08-24
+
+### Added
+
+- Add `BirSearchBuilder::sole()` with `BirAmbiguousSearchResultException` and
+  `EntityType` family helpers that include local units
 
 ### Fixed
 
@@ -243,8 +248,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Isolated tests and opt-in live GUS sandbox tests
 - A discoverable Laravel Boost skill for AI-assisted integrations
 
-[Unreleased]: https://github.com/cieplik206/laravel-bir-regon/compare/v2.0.1...HEAD
-[2.0.1]: https://github.com/cieplik206/laravel-bir-regon/compare/v2.0.0...v2.0.1
+[Unreleased]: https://github.com/cieplik206/laravel-bir-regon/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/cieplik206/laravel-bir-regon/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.1.1...v2.0.0
 [1.1.1]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/cieplik206/laravel-bir-regon/compare/v1.0.2...v1.1.0

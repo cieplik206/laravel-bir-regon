@@ -167,15 +167,18 @@ Choose the entry point that matches the identifier:
 $byNip = BirRegon::forNip($nip)->get();       // Collection<CompanyData>
 $byRegon = BirRegon::forRegon($regon)->get();
 $byKrs = BirRegon::forKrs($krs)->get();
+$company = BirRegon::forNip($nip)->sole();    // CompanyData
 ```
 
 `get()` and `search()` are aliases. They always return
 `Illuminate\Support\Collection<int, CompanyData>`, including for one input
 identifier. GUS can return multiple valid rows and silos for one NIP, REGON, or
-KRS. Preserve all of them. Use `sole()` only when the consuming domain requires
-exactly one row; do not silently replace the collection with `first()`. A
-lookup with no rows throws `BirNotFoundException` rather than returning an
-empty collection.
+KRS. Preserve all of them: these methods are the safe plural default and never
+silently choose a silo. Builder `sole()` returns one `CompanyData`, throws
+`BirNotFoundException` for no rows, and throws
+`BirAmbiguousSearchResultException` for multiple rows. Use it only when the
+consuming domain requires exactly one row; never bypass ambiguity with
+`first()`.
 
 `CompanyData::$type`, `$silo`, and `$nipStatus` use `EntityType`, `Silo`, and
 nullable `NipStatus` enums. `regon14` is nullable and must remain `null` unless
@@ -186,11 +189,14 @@ The only non-empty `NipStatus` cases are `Revoked` (`Uchylony`) and
 
 Use the exact closed enum cases. `EntityType` contains `LegalUnit` (`P`),
 `NaturalPerson` (`F`), `LegalUnitLocalUnit` (`LP`), and
-`NaturalPersonLocalUnit` (`LF`). `Silo` contains `Ceidg` (`1`), `Agriculture`
-(`2`), `Other` (`3`), `DeletedBefore20141108` (`4`), and `LegalUnits` (`6`).
-`activityEndDate` is a nullable normalized `xs:date` lexical string, optionally
-retaining `Z` or a legal `+/-hh:mm` suffix; do not assume it is always exactly
-ten characters.
+`NaturalPersonLocalUnit` (`LF`). Use `isNaturalPersonFamily()` for
+`NaturalPerson` and `NaturalPersonLocalUnit`; use `isLegalUnitFamily()` for
+`LegalUnit` and `LegalUnitLocalUnit`. Both helpers deliberately include local
+units, so prefer them to repeating family case lists. `Silo` contains `Ceidg`
+(`1`), `Agriculture` (`2`), `Other` (`3`), `DeletedBefore20141108` (`4`), and
+`LegalUnits` (`6`). `activityEndDate` is a nullable normalized `xs:date`
+lexical string, optionally retaining `Z` or a legal `+/-hh:mm` suffix; do not
+assume it is always exactly ten characters.
 
 Use dedicated batch methods:
 
@@ -470,6 +476,7 @@ Handle the package exception hierarchy from most specific to least specific:
 ```php
 use cieplik206\BirRegon\Exceptions\BirAuthenticationException;
 use cieplik206\BirRegon\Exceptions\BirAmbiguousResultException;
+use cieplik206\BirRegon\Exceptions\BirAmbiguousSearchResultException;
 use cieplik206\BirRegon\Exceptions\BirException;
 use cieplik206\BirRegon\Exceptions\BirNotFoundException;
 use cieplik206\BirRegon\Exceptions\BirProtocolException;
@@ -480,11 +487,13 @@ use cieplik206\BirRegon\Exceptions\BirTransportException;
 use cieplik206\BirRegon\Exceptions\BirValidationException;
 
 try {
-    $companies = BirRegon::forNip($nip)->get();
+    $company = BirRegon::forNip($nip)->sole();
 } catch (BirNotFoundException $exception) {
     // No matching entity.
 } catch (BirAuthenticationException $exception) {
     // Missing/rejected API key or failed session renewal.
+} catch (BirAmbiguousSearchResultException $exception) {
+    // sole() found multiple search rows; use get() or search() to keep them.
 } catch (BirAmbiguousResultException $exception) {
     // A singular full-report call had several targets; use getFullReports().
 } catch (BirValidationException $exception) {
@@ -513,11 +522,15 @@ construct equally safe exceptions without secret text or an unsafe previous
 exception. PHP does not inherit parameter attributes from interfaces, so custom
 client, gateway, transport, limiter, and test-fake implementations must repeat
 the attribute on their sensitive parameters.
-`BirAmbiguousResultException::$identifier` does not exist; keep an application
-correlation value separately if needed. Construct
+Neither ambiguity exception exposes an `identifier` property; their
+`identifierType` contains only the sanitized identifier kind. Keep an
+application correlation value separately if needed. Construct
 `BirNotFoundException` with only the identifier type, and construct
-`BirAmbiguousResultException` with the identifier type and compatible target
-count. Read `BirReportException::$gusCode` for a rejected report. Use
+`BirAmbiguousSearchResultException` with the identifier type and complete
+search-row count. Construct `BirAmbiguousResultException` with the identifier
+type and distinct compatible report-target count. Inspect their safe
+`resultCount` and `compatibleTargetCount` properties respectively instead of
+parsing messages. Read `BirReportException::$gusCode` for a rejected report. Use
 `BirValidationException`, `BirTransportException`, and
 `BirProtocolException` when retry policy needs to distinguish local input,
 connectivity, and malformed responses.

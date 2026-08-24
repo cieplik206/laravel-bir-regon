@@ -3,8 +3,9 @@
 # Data objects
 
 Company, report, service-status, and diagnostics responses are typed objects
-based on `spatie/laravel-data`. Singular identifier builders return collections
-of these objects because one identifier can have records in several GUS silos.
+based on `spatie/laravel-data`. `get()` and `search()` on a singular identifier
+builder return collections because one identifier can have records in several
+GUS silos; `sole()` returns one `CompanyData` only when exactly one row exists.
 Data objects can be read through public properties and converted to arrays or
 JSON.
 
@@ -47,6 +48,18 @@ The closed response vocabularies are represented by backed enums:
 | `EntityType` | `LegalUnit` (`P`), `NaturalPerson` (`F`), `LegalUnitLocalUnit` (`LP`), `NaturalPersonLocalUnit` (`LF`) |
 | `Silo` | `Ceidg` (`1`), `Agriculture` (`2`), `Other` (`3`), `DeletedBefore20141108` (`4`), `LegalUnits` (`6`) |
 | `NipStatus` | `Revoked` (`Uchylony`), `Invalidated` (`Unieważniony`) |
+
+`EntityType` provides exhaustive family checks without requiring consumers to
+repeat enum case lists:
+
+```php
+$company->type->isNaturalPersonFamily(); // F and LF
+$company->type->isLegalUnitFamily(); // P and LP
+```
+
+`NaturalPerson` and `NaturalPersonLocalUnit` belong to the natural-person
+family. `LegalUnit` and `LegalUnitLocalUnit` belong to the legal-unit family,
+so both helpers include the corresponding local-unit case.
 
 An empty `StatusNip` becomes `null`. An undocumented value in one of these
 closed fields is treated as an invalid GUS response and results in a
@@ -190,12 +203,13 @@ output- and log-context handling described above.
 
 ## Other return values
 
-Singular and batch search builders return an
-`Illuminate\Support\Collection<int, CompanyData>`. Plural full reports return
-an `Illuminate\Support\Collection<int, FullCompanyReportData>`, the
+`get()` and `search()` on singular identifier builders, and `get()` on batch
+builders, return an `Illuminate\Support\Collection<int, CompanyData>`.
+Singular builder `sole()` instead returns one `CompanyData`. Plural full reports
+return an `Illuminate\Support\Collection<int, FullCompanyReportData>`, the
 authenticated data-status operation returns a `DateTimeImmutable`, and
-`logout()` returns a boolean. These values are not `spatie/laravel-data`
-objects.
+`logout()` returns a boolean. The collections, date, and boolean are not
+`spatie/laravel-data` objects.
 
 See [Service status and diagnostics](service-status-and-diagnostics.md) for
 usage examples.
